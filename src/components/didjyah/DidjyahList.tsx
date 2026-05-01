@@ -23,9 +23,6 @@ type DidjyahFolderRow = InstaQLEntity<AppSchema, "didjyahFolders", { owner: {} }
 const DidjyahList: React.FC = () => {
   const user = db.useUser()
   const [viewMode] = useViewMode()
-  const [expandedFolderId, setExpandedFolderId] = React.useState<string | null>(
-    null,
-  )
 
   const { data, isLoading, error } = db.useQuery({
     didjyahs: {
@@ -119,36 +116,12 @@ const DidjyahList: React.FC = () => {
         }`}
       >
         {folders.map((folder) => (
-          <React.Fragment key={folder.id}>
-            <FolderCard
-              folder={folder}
-              childCount={(folderMap.get(folder.id) ?? []).length}
-              viewMode={viewMode}
-              isExpanded={expandedFolderId === folder.id}
-              onToggle={() =>
-                setExpandedFolderId((prev) =>
-                  prev === folder.id ? null : folder.id,
-                )
-              }
-            />
-            {expandedFolderId === folder.id ? (
-              <div
-                className={
-                  isGridView
-                    ? "col-span-4 grid grid-cols-4 gap-2 md:gap-3"
-                    : "flex w-full max-w-[450px] flex-col gap-2 border-l-2 border-muted pl-3"
-                }
-              >
-                {(folderMap.get(folder.id) ?? []).map((item) => (
-                  <DidjyahCard
-                    key={item.id}
-                    detail={item}
-                    viewMode={viewMode}
-                  />
-                ))}
-              </div>
-            ) : null}
-          </React.Fragment>
+          <FolderCard
+            key={folder.id}
+            folder={folder}
+            folderDidjyahs={folderMap.get(folder.id) ?? []}
+            viewMode={viewMode}
+          />
         ))}
         {unfolderedDidjyahs.map((item) => (
           <DidjyahCard key={item.id} detail={item} viewMode={viewMode} />

@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { CreateDidjyahDialog } from "@/components/didjyah/CreateDidjyahDialog"
+import { CreateFolderDialog } from "@/components/didjyah/CreateFolderDialog"
 import { ViewToggle } from "@/components/didjyah/ViewToggle"
 import { History } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -85,7 +86,10 @@ export default function Navbar() {
             <Clock />
             {isDidjyahRoute ? (
               <db.SignedIn>
-                <CreateDidjyahDialog />
+                <div className="flex items-center gap-2">
+                  <CreateDidjyahDialog />
+                  <CreateFolderDialog />
+                </div>
               </db.SignedIn>
             ) : null}
             <ViewToggle />
@@ -115,9 +119,15 @@ export default function Navbar() {
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-around px-4">
           {isDidjyahRoute ? (
             <db.SignedIn>
-              <div className="flex flex-col items-center justify-center gap-1">
-                <CreateDidjyahDialog />
-                <span className="text-xs">Create</span>
+              <div className="flex items-center gap-3">
+                <div className="flex flex-col items-center justify-center gap-1">
+                  <CreateDidjyahDialog />
+                  <span className="text-xs">Create</span>
+                </div>
+                <div className="flex flex-col items-center justify-center gap-1">
+                  <CreateFolderDialog />
+                  <span className="text-xs">Folder</span>
+                </div>
               </div>
               <Link
                 to="/history"

@@ -6,7 +6,7 @@ type ActionType = "create" | "update" | "delete"
 
 type UndoableAction = {
   type: ActionType
-  entityType: "todos" | "didjyahs" | "didjyahRecords"
+  entityType: "todos" | "didjyahs" | "didjyahRecords" | "didjyahFolders"
   entityId: string
   previousData?: Record<string, unknown>
   newData?: Record<string, unknown>
@@ -130,7 +130,7 @@ export function useUndo() {
 }
 
 export async function getEntityData(
-  entityType: "todos" | "didjyahs" | "didjyahRecords",
+  entityType: "todos" | "didjyahs" | "didjyahRecords" | "didjyahFolders",
   entityId: string,
 ): Promise<Record<string, unknown> | null> {
   try {
@@ -138,6 +138,7 @@ export async function getEntityData(
       todos?: unknown[]
       didjyahs?: unknown[]
       didjyahRecords?: unknown[]
+      didjyahFolders?: unknown[]
     }
 
     switch (entityType) {
@@ -158,6 +159,13 @@ export async function getEntityData(
       case "didjyahRecords":
         ;({ data } = await db.queryOnce({
           didjyahRecords: {
+            $: { where: { id: entityId } },
+          },
+        }))
+        break
+      case "didjyahFolders":
+        ;({ data } = await db.queryOnce({
+          didjyahFolders: {
             $: { where: { id: entityId } },
           },
         }))

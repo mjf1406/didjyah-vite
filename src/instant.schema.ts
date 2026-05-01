@@ -18,6 +18,14 @@ const _schema = i.schema({
             imageURL: i.string().optional(),
             type: i.string().optional(),
         }),
+        didjyahFolders: i.entity({
+            color: i.string().optional(),
+            createdDate: i.number().indexed().optional(),
+            icon: i.string().optional(),
+            iconColor: i.string().optional(),
+            name: i.string(),
+            updatedDate: i.number().optional(),
+        }),
         didjyahRecords: i.entity({
             createdDate: i.number().indexed().optional(),
             endDate: i.number().optional(),
@@ -96,6 +104,18 @@ const _schema = i.schema({
                 label: "didjyahRecords",
             },
         },
+        didjyahsFolder: {
+            forward: {
+                on: "didjyahs",
+                has: "one",
+                label: "folder",
+            },
+            reverse: {
+                on: "didjyahFolders",
+                has: "many",
+                label: "didjyahs",
+            },
+        },
         didjyahsOwner: {
             forward: {
                 on: "didjyahs",
@@ -107,6 +127,19 @@ const _schema = i.schema({
                 on: "$users",
                 has: "many",
                 label: "didjyahs",
+            },
+        },
+        didjyahFoldersOwner: {
+            forward: {
+                on: "didjyahFolders",
+                has: "one",
+                label: "owner",
+                onDelete: "cascade",
+            },
+            reverse: {
+                on: "$users",
+                has: "many",
+                label: "didjyahFolders",
             },
         },
         profilesUser: {

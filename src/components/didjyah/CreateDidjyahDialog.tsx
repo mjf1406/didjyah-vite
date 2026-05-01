@@ -15,6 +15,14 @@ import {
   FormControl,
   FormMessage,
 } from "@/components/ui/form"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  SELECT_EMPTY_VALUE,
+} from "@/components/ui/select"
 import { toast } from "sonner"
 import { APP_NAME } from "@/lib/constants"
 import { nowMs } from "@/lib/time"
@@ -36,6 +44,7 @@ import { Plus } from "lucide-react"
 
 const didjyahSchema = z.object({
   name: z.string().min(1, "Name is required"),
+  folderId: z.string().optional(),
   type: z.enum(["since", "timer", "stopwatch", "daily", "goal"]),
   icon: z.string().optional(),
   color: z.string().optional(),
@@ -58,10 +67,21 @@ export function CreateDidjyahDialog() {
   const [open, setOpen] = React.useState(false)
   const { registerAction } = useUndo()
 
+  const { data: folderQueryData } = db.useQuery(
+    user.id
+      ? {
+          didjyahFolders: {
+            $: { where: { "owner.id": user.id } },
+          },
+        }
+      : null,
+  )
+
   const form = useForm<DidjyahFormValues>({
     resolver: zodResolver(didjyahSchema),
     defaultValues: {
       name: "",
+      folderId: "",
       type: "since",
       icon: "",
       color: "#000000",
@@ -113,15 +133,25 @@ export function CreateDidjyahDialog() {
       if (data.note !== undefined) updateData.note = data.note
       if (parsedInputs !== null) updateData.inputs = parsedInputs
 
-      await db.transact(
-        db.tx.didjyahs[didjyahId].update(updateData).link({ owner: user.id }),
-      )
+      const folderIdNext = data.folderId?.trim() || undefined
+
+      let tx = db.tx.didjyahs[didjyahId]
+        .update(updateData)
+        .link({ owner: user.id })
+      if (folderIdNext) {
+        tx = tx.link({ folder: folderIdNext })
+      }
+
+      await db.transact(tx)
 
       registerAction({
         type: "create",
         entityType: "didjyahs",
         entityId: didjyahId,
-        links: { owner: user.id },
+        links: {
+          owner: user.id,
+          ...(folderIdNext ? { folder: folderIdNext } : {}),
+        },
         message: `Didjyah "${data.name}" created`,
       })
 
@@ -168,6 +198,48 @@ export function CreateDidjyahDialog() {
                     <FormControl>
                       <Input placeholder="Didjyah Name" {...field} />
                     </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="folderId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Folder</FormLabel>
+                    <Select
+                      value={
+                        field.value && field.value.length > 0
+                          ? field.value
+                          : SELECT_EMPTY_VALUE
+                      }
+                      onValueChange={(v) =>
+                        field.onChange(
+                          v === SELECT_EMPTY_VALUE ? "" : v,
+                        )
+                      }
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="(No folder)" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent position="popper">
+                        <SelectItem value={SELECT_EMPTY_VALUE}>
+                          (No folder)
+                        </SelectItem>
+                        {(folderQueryData?.didjyahFolders ?? [])
+                          .slice()
+                          .sort((a, b) => a.name.localeCompare(b.name))
+                          .map((f) => (
+                            <SelectItem key={f.id} value={f.id}>
+                              {f.name}
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
                     <FormMessage />
                   </FormItem>
                 )}

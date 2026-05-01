@@ -3,25 +3,39 @@ import { db } from "@/lib/db"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { CircleX } from "lucide-react"
 import DidjyahCard from "@/components/didjyah/DidjyahCard"
+import FolderCard from "@/components/didjyah/FolderCard"
 import { Skeleton } from "@/components/ui/skeleton"
 import NoDidjyahsCard from "@/components/didjyah/NoDidjyahsCard"
 import { useViewMode } from "@/components/didjyah/useViewMode"
 import type { InstaQLEntity } from "@instantdb/react"
 import type { AppSchema } from "@/instant.schema"
 
+/* eslint-disable @typescript-eslint/no-empty-object-type -- InstaQL nested link shapes */
 type DidjyahWithRecords = InstaQLEntity<
   AppSchema,
   "didjyahs",
-  { owner: {}; records: {} }
+  { owner: {}; records: {}; folder: {} }
 >
+
+type DidjyahFolderRow = InstaQLEntity<AppSchema, "didjyahFolders", { owner: {} }>
+/* eslint-enable @typescript-eslint/no-empty-object-type */
 
 const DidjyahList: React.FC = () => {
   const user = db.useUser()
   const [viewMode] = useViewMode()
+  const [expandedFolderId, setExpandedFolderId] = React.useState<string | null>(
+    null,
+  )
+
   const { data, isLoading, error } = db.useQuery({
     didjyahs: {
       $: { where: { "owner.id": user.id } },
       records: {},
+      folder: {},
+    },
+    didjyahFolders: {
+      $: { where: { "owner.id": user.id } },
+      owner: {},
     },
   })
 
@@ -58,8 +72,10 @@ const DidjyahList: React.FC = () => {
   }
 
   const didjyahs = (data?.didjyahs || []) as DidjyahWithRecords[]
+  const folders = ((data?.didjyahFolders || []) as DidjyahFolderRow[]).slice()
+  folders.sort((a, b) => a.name.localeCompare(b.name))
 
-  if (didjyahs.length === 0) {
+  if (didjyahs.length === 0 && folders.length === 0) {
     return (
       <div className="m-auto flex h-auto w-full items-center justify-center">
         <div className="max-w-5xl px-4">
@@ -68,6 +84,21 @@ const DidjyahList: React.FC = () => {
       </div>
     )
   }
+
+  const folderMap = new Map<string, DidjyahWithRecords[]>()
+  for (const d of didjyahs) {
+    const fid = d.folder?.id
+    if (fid) {
+      const list = folderMap.get(fid) ?? []
+      list.push(d)
+      folderMap.set(fid, list)
+    }
+  }
+  for (const list of folderMap.values()) {
+    list.sort((a, b) => a.name.localeCompare(b.name))
+  }
+
+  const unfolderedDidjyahs = didjyahs.filter((d) => !d.folder)
 
   const isGridView = viewMode === "grid"
 
@@ -87,7 +118,39 @@ const DidjyahList: React.FC = () => {
             : "flex flex-col items-center gap-2"
         }`}
       >
-        {didjyahs.map((item) => (
+        {folders.map((folder) => (
+          <React.Fragment key={folder.id}>
+            <FolderCard
+              folder={folder}
+              childCount={(folderMap.get(folder.id) ?? []).length}
+              viewMode={viewMode}
+              isExpanded={expandedFolderId === folder.id}
+              onToggle={() =>
+                setExpandedFolderId((prev) =>
+                  prev === folder.id ? null : folder.id,
+                )
+              }
+            />
+            {expandedFolderId === folder.id ? (
+              <div
+                className={
+                  isGridView
+                    ? "col-span-4 grid grid-cols-4 gap-2 md:gap-3"
+                    : "flex w-full max-w-[450px] flex-col gap-2 border-l-2 border-muted pl-3"
+                }
+              >
+                {(folderMap.get(folder.id) ?? []).map((item) => (
+                  <DidjyahCard
+                    key={item.id}
+                    detail={item}
+                    viewMode={viewMode}
+                  />
+                ))}
+              </div>
+            ) : null}
+          </React.Fragment>
+        ))}
+        {unfolderedDidjyahs.map((item) => (
           <DidjyahCard key={item.id} detail={item} viewMode={viewMode} />
         ))}
       </div>

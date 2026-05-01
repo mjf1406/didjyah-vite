@@ -24,11 +24,13 @@ import { MoreVertical, Edit, Trash, BarChart3, Calendar } from "lucide-react"
 import type { InstaQLEntity } from "@instantdb/react"
 import type { AppSchema } from "@/instant.schema"
 
+/* eslint-disable @typescript-eslint/no-empty-object-type -- InstaQL nested link shapes */
 type DidjyahWithRecords = InstaQLEntity<
   AppSchema,
   "didjyahs",
-  { records: {} }
+  { records: {}; folder: {} }
 >
+/* eslint-enable @typescript-eslint/no-empty-object-type */
 
 interface DidjyahCardProps {
   detail: DidjyahWithRecords

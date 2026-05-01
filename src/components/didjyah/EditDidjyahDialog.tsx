@@ -14,6 +14,14 @@ import {
   FormControl,
   FormMessage,
 } from "@/components/ui/form"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  SELECT_EMPTY_VALUE,
+} from "@/components/ui/select"
 import { toast } from "sonner"
 import { APP_NAME } from "@/lib/constants"
 import { nowMs } from "@/lib/time"
@@ -35,14 +43,17 @@ import {
 import type { InstaQLEntity } from "@instantdb/react"
 import type { AppSchema } from "@/instant.schema"
 
+/* eslint-disable @typescript-eslint/no-empty-object-type -- InstaQL nested link shapes */
 type DidjyahWithRecords = InstaQLEntity<
   AppSchema,
   "didjyahs",
-  { records: {} }
+  { records: {}; folder: {} }
 >
+/* eslint-enable @typescript-eslint/no-empty-object-type */
 
 const didjyahSchema = z.object({
   name: z.string().min(1, "Name is required"),
+  folderId: z.string().optional(),
   type: z.enum(["since", "timer", "stopwatch", "daily", "goal"]),
   icon: z.string().optional(),
   color: z.string().optional(),
@@ -71,14 +82,27 @@ export function EditDidjyahDialog({
   open: controlledOpen,
   onOpenChange: controlledOnOpenChange,
 }: EditDidjyahDialogProps) {
+  const user = db.useUser()
   const [internalOpen, setInternalOpen] = React.useState(false)
   const open = controlledOpen !== undefined ? controlledOpen : internalOpen
   const setOpen = controlledOnOpenChange || setInternalOpen
   const { registerAction } = useUndo()
+
+  const { data: folderQueryData } = db.useQuery(
+    user.id
+      ? {
+          didjyahFolders: {
+            $: { where: { "owner.id": user.id } },
+          },
+        }
+      : null,
+  )
+
   const form = useForm<DidjyahFormValues>({
     resolver: zodResolver(didjyahSchema),
     defaultValues: {
       name: didjyah.name,
+      folderId: didjyah.folder?.id ?? "",
       type:
         (didjyah.type as
           | "since"
@@ -109,6 +133,7 @@ export function EditDidjyahDialog({
   useEffect(() => {
     form.reset({
       name: didjyah.name,
+      folderId: didjyah.folder?.id ?? "",
       type:
         (didjyah.type as
           | "since"
@@ -170,7 +195,18 @@ export function EditDidjyahDialog({
       if (data.note !== undefined) updateData.note = data.note
       if (parsedInputs !== null) updateData.inputs = parsedInputs
 
-      await db.transact(db.tx.didjyahs[didjyah.id].update(updateData))
+      const prevFolderId = didjyah.folder?.id
+      const nextFolderId = data.folderId?.trim() || undefined
+
+      let tx = db.tx.didjyahs[didjyah.id].update(updateData)
+      if (prevFolderId && prevFolderId !== nextFolderId) {
+        tx = tx.unlink({ folder: prevFolderId })
+      }
+      if (nextFolderId && nextFolderId !== prevFolderId) {
+        tx = tx.link({ folder: nextFolderId })
+      }
+
+      await db.transact(tx)
 
       if (previousData) {
         registerAction({
@@ -227,6 +263,48 @@ export function EditDidjyahDialog({
                     <FormControl>
                       <Input placeholder="Didjyah Name" {...field} />
                     </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="folderId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Folder</FormLabel>
+                    <Select
+                      value={
+                        field.value && field.value.length > 0
+                          ? field.value
+                          : SELECT_EMPTY_VALUE
+                      }
+                      onValueChange={(v) =>
+                        field.onChange(
+                          v === SELECT_EMPTY_VALUE ? "" : v,
+                        )
+                      }
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="(No folder)" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent position="popper">
+                        <SelectItem value={SELECT_EMPTY_VALUE}>
+                          (No folder)
+                        </SelectItem>
+                        {(folderQueryData?.didjyahFolders ?? [])
+                          .slice()
+                          .sort((a, b) => a.name.localeCompare(b.name))
+                          .map((f) => (
+                            <SelectItem key={f.id} value={f.id}>
+                              {f.name}
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
                     <FormMessage />
                   </FormItem>
                 )}

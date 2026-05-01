@@ -90,6 +90,24 @@ const rules = {
       update: "isOwner || isGuestOwner",
     },
   },
+  didjyahFolders: {
+    bind: [
+      "isAuthenticated",
+      "auth.id != null",
+      "isOwner",
+      "data.owner == auth.id",
+      "isGuestOwner",
+      "data.owner in auth.ref('$user.linkedGuestUsers.id')",
+      "isPremium",
+      "auth.ref('$user.profile.plan').exists(p, p in ['basic', 'plus', 'pro'])",
+    ],
+    allow: {
+      view: "isOwner || isGuestOwner",
+      create: "isAuthenticated",
+      delete: "isOwner || isGuestOwner",
+      update: "isOwner || isGuestOwner",
+    },
+  },
   userProfiles: {
     bind: [
       "isAuthenticated",

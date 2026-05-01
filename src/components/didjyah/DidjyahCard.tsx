@@ -35,11 +35,13 @@ type DidjyahWithRecords = InstaQLEntity<
 interface DidjyahCardProps {
   detail: DidjyahWithRecords
   viewMode?: "list" | "grid"
+  onRecorded?: () => void
 }
 
 const DidjyahCard: React.FC<DidjyahCardProps> = ({
   detail,
   viewMode = "list",
+  onRecorded,
 }) => {
   const user = db.useUser()
   const [editDialogOpen, setEditDialogOpen] = React.useState(false)
@@ -129,6 +131,7 @@ const DidjyahCard: React.FC<DidjyahCardProps> = ({
             links: { didjyah: detail.id, owner: user.id },
             message: `Record added to "${detail.name}"`,
           })
+          onRecorded?.()
         } catch (error) {
           const message =
             error instanceof Error
@@ -418,6 +421,7 @@ const DidjyahCard: React.FC<DidjyahCardProps> = ({
               links: { didjyah: detail.id, owner: user.id },
               message: `Record added to "${detail.name}"`,
             })
+            onRecorded?.()
           } catch (error) {
             const message =
               error instanceof Error

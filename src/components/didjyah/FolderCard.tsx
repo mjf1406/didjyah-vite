@@ -302,7 +302,12 @@ const FolderCard: React.FC<FolderCardProps> = ({
           ) : (
             <div className="grid grid-cols-3 gap-2">
               {folderDidjyahs.map((item) => (
-                <DidjyahCard key={item.id} detail={item} viewMode="grid" />
+                <DidjyahCard
+                  key={item.id}
+                  detail={item}
+                  viewMode="grid"
+                  onRecorded={() => setOpen(false)}
+                />
               ))}
             </div>
           )}

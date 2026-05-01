@@ -16,6 +16,7 @@ export default defineConfig({
       injectRegister: false,
       devOptions: {
         enabled: true,
+        suppressWarnings: true,
       },
       workbox: {
         globPatterns: ["**/*.{js,css,html,svg,png,ico,woff2}"],

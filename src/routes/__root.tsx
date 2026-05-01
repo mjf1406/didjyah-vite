@@ -8,6 +8,7 @@ import ConnectionStatusMonitor from "@/components/ConnectionStatusMonitor"
 import Navbar from "@/components/Navbar"
 import EnsureProfile from "@/components/EnsureProfile"
 import { Toaster } from "@/components/ui/sonner"
+import PWAUpdatePrompt from "@/components/PWAUpdatePrompt"
 import { db } from "@/lib/db"
 
 export const Route = createRootRoute({
@@ -28,6 +29,7 @@ function RootLayout() {
             <Outlet />
           </div>
           <Toaster />
+          <PWAUpdatePrompt />
         </UndoProvider>
       </TooltipProvider>
       <TanStackRouterDevtools position="bottom-right" />

@@ -20,7 +20,8 @@ export default function ActiveStopwatchBar({ sessions }: ActiveStopwatchBarProps
   const { registerAction } = useUndo()
   const [noteDialogOpen, setNoteDialogOpen] = React.useState(false)
   const [noteDialogKey, setNoteDialogKey] = React.useState(0)
-  const pendingSessionRef = React.useRef<ActiveStopwatchSession | null>(null)
+  const [pendingSession, setPendingSession] =
+    React.useState<ActiveStopwatchSession | null>(null)
 
   if (sessions.length === 0) return null
 
@@ -49,7 +50,7 @@ export default function ActiveStopwatchBar({ sessions }: ActiveStopwatchBarProps
 
   const handleStop = (session: ActiveStopwatchSession) => {
     if (session.didjyah.note) {
-      pendingSessionRef.current = session
+      setPendingSession(session)
       setNoteDialogKey((k) => k + 1)
       setNoteDialogOpen(true)
       return
@@ -60,7 +61,7 @@ export default function ActiveStopwatchBar({ sessions }: ActiveStopwatchBarProps
   return (
     <>
       <div
-        className="fixed bottom-16 left-0 right-0 z-40 border-t border-red-500/30 bg-background/95 px-4 py-2 shadow-[0_-4px_12px_rgba(0,0,0,0.08)] backdrop-blur-sm supports-[backdrop-filter]:bg-background/85 md:bottom-0"
+        className="fixed bottom-16 left-0 right-0 z-40 border-t border-red-500/30 bg-background/95 px-4 py-2 shadow-[0_-4px_12px_rgba(0,0,0,0.08)] backdrop-blur-sm supports-backdrop-filter:bg-background/85 md:bottom-0"
         role="region"
         aria-label="Active stopwatch sessions"
       >
@@ -110,14 +111,13 @@ export default function ActiveStopwatchBar({ sessions }: ActiveStopwatchBarProps
         open={noteDialogOpen}
         onOpenChange={(open) => {
           setNoteDialogOpen(open)
-          if (!open) pendingSessionRef.current = null
+          if (!open) setPendingSession(null)
         }}
-        didjyahName={pendingSessionRef.current?.didjyah.name ?? "DidjYah"}
+        didjyahName={pendingSession?.didjyah.name ?? "DidjYah"}
         onConfirm={async (noteText) => {
-          const session = pendingSessionRef.current
-          if (!session) return
-          await runStop(session, noteText)
-          pendingSessionRef.current = null
+          if (!pendingSession) return
+          await runStop(pendingSession, noteText)
+          setPendingSession(null)
         }}
       />
     </>

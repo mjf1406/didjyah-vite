@@ -38,6 +38,7 @@ import {
 import { Label } from "@/components/ui/label";
 import type { InstaQLEntity } from "@instantdb/react";
 import type { AppSchema } from "@/instant.schema";
+import { RecordDurationDisplay } from "@/components/didjyah/RecordDurationDisplay";
 
 type DidjyahRecordWithDidjyah = InstaQLEntity<
   AppSchema,
@@ -568,11 +569,19 @@ export function DidjyahHistoryContent() {
                                         <p className="text-sm text-muted-foreground">
                                             Created: {formatDate(record.createdDate)}
                                         </p>
-                                        {record.endDate && (
+                                        {record.endDate &&
+                                        record.endDate !== record.createdDate ? (
                                             <p className="text-sm text-muted-foreground">
                                                 Ended: {formatDate(record.endDate)}
                                             </p>
-                                        )}
+                                        ) : null}
+                                        <RecordDurationDisplay
+                                            createdDate={record.createdDate}
+                                            endDate={record.endDate}
+                                            stopwatchEnabled={
+                                                record.didjyah?.stopwatch
+                                            }
+                                        />
                                     </div>
                                 </div>
                                 <div className="ml-4">

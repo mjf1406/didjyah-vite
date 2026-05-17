@@ -29,6 +29,7 @@ import { useUndo, getEntityData } from "@/lib/undo"
 import type { InstaQLEntity } from "@instantdb/react"
 import type { AppSchema } from "@/instant.schema"
 import { EditRecordDialog } from "@/components/didjyah/EditRecordDialog"
+import { RecordDurationDisplay } from "@/components/didjyah/RecordDurationDisplay"
 
 const PAGE_SIZE = 20
 
@@ -42,6 +43,7 @@ interface RecordsListProps {
   didjyah: {
     id: string
     name: string
+    stopwatch?: boolean | null
   }
 }
 
@@ -217,6 +219,11 @@ export default function RecordsList({ didjyah }: RecordsListProps) {
                       Ended: {formatDate(record.endDate)}
                     </p>
                   ) : null}
+                  <RecordDurationDisplay
+                    createdDate={record.createdDate}
+                    endDate={record.endDate}
+                    stopwatchEnabled={didjyah.stopwatch}
+                  />
                   {record.note ? (
                     <p className="truncate text-sm text-muted-foreground">
                       Note: {record.note}

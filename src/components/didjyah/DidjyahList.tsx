@@ -1,4 +1,4 @@
-import React from "react"
+import React, { useMemo } from "react"
 import { db } from "@/lib/db"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { CircleX } from "lucide-react"
@@ -6,6 +6,8 @@ import DidjyahCard from "@/components/didjyah/DidjyahCard"
 import FolderCard from "@/components/didjyah/FolderCard"
 import { Skeleton } from "@/components/ui/skeleton"
 import NoDidjyahsCard from "@/components/didjyah/NoDidjyahsCard"
+import ActiveStopwatchBar from "@/components/didjyah/ActiveStopwatchBar"
+import { collectActiveStopwatchSessions } from "@/lib/stopwatch"
 import { useViewMode } from "@/components/didjyah/useViewMode"
 import type { InstaQLEntity } from "@instantdb/react"
 import type { AppSchema } from "@/instant.schema"
@@ -35,6 +37,12 @@ const DidjyahList: React.FC = () => {
       owner: {},
     },
   })
+
+  const didjyahsFromQuery = (data?.didjyahs || []) as DidjyahWithRecords[]
+  const activeSessions = useMemo(
+    () => collectActiveStopwatchSessions(didjyahsFromQuery),
+    [didjyahsFromQuery],
+  )
 
   if (isLoading) {
     return (
@@ -68,7 +76,7 @@ const DidjyahList: React.FC = () => {
     )
   }
 
-  const didjyahs = (data?.didjyahs || []) as DidjyahWithRecords[]
+  const didjyahs = didjyahsFromQuery
   const folders = ((data?.didjyahFolders || []) as DidjyahFolderRow[]).slice()
   folders.sort((a, b) => a.name.localeCompare(b.name))
 
@@ -99,12 +107,27 @@ const DidjyahList: React.FC = () => {
 
   const isGridView = viewMode === "grid"
 
+  const activeBarScrollPadding =
+    activeSessions.length === 0
+      ? ""
+      : activeSessions.length === 1
+        ? "pb-36 md:pb-28"
+        : activeSessions.length === 2
+          ? "pb-48 md:pb-40"
+          : "pb-56 md:pb-48"
+
   return (
-    <div className="flex w-full flex-col items-center justify-center gap-2">
+    <div
+      className={`flex w-full flex-col items-center justify-center gap-2 ${activeBarScrollPadding}`}
+    >
       {isGridView ? (
         <div className="w-full px-4 py-2 text-center">
           <p className="text-xs text-muted-foreground">
-            Double tap a card to do it • Tap and hold to open the action menu
+            Double tap a card to do it
+            {activeSessions.length > 0
+              ? " • Double tap again to stop a running session"
+              : ""}{" "}
+            • Tap and hold to open the action menu
           </p>
         </div>
       ) : null}
@@ -127,6 +150,9 @@ const DidjyahList: React.FC = () => {
           <DidjyahCard key={item.id} detail={item} viewMode={viewMode} />
         ))}
       </div>
+      {activeSessions.length > 0 ? (
+        <ActiveStopwatchBar sessions={activeSessions} />
+      ) : null}
     </div>
   )
 }

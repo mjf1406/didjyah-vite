@@ -160,7 +160,13 @@ function DidjyahDashboard() {
         <GoalProgress didjyah={didjyah} />
       </div>
       <StreakTracker didjyah={didjyah} />
-      <RecordsList didjyah={didjyah} />
+      <RecordsList
+        didjyah={{
+          id: didjyah.id,
+          name: didjyah.name,
+          stopwatch: didjyah.stopwatch,
+        }}
+      />
     </div>
   )
 }

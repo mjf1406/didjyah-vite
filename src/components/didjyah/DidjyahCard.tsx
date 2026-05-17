@@ -7,6 +7,11 @@ import { id } from "@instantdb/react"
 import { db } from "@/lib/db"
 import { useUndo } from "@/lib/undo"
 import { nowMs } from "@/lib/time"
+import {
+  getActiveStopwatchRecord,
+  startStopwatchSession,
+  stopStopwatchSession,
+} from "@/lib/stopwatch"
 import { Progress } from "@/components/ui/progress"
 import EditDidjyahDialog from "@/components/didjyah/EditDidjyahDialog"
 import { Button } from "@/components/ui/button"
@@ -50,10 +55,15 @@ const DidjyahCard: React.FC<DidjyahCardProps> = ({
   const [noteDialogOpen, setNoteDialogOpen] = React.useState(false)
   const [noteDialogKey, setNoteDialogKey] = React.useState(0)
   const pendingTimestampRef = React.useRef<number | null>(null)
+  const pendingStopRecordIdRef = React.useRef<string | null>(null)
+  const noteDialogModeRef = React.useRef<"create" | "stop">("create")
   const { registerAction } = useUndo()
 
   const lastTapTimeRef = React.useRef<number>(0)
   const doubleTapDelay = 300
+
+  const activeRecord = getActiveStopwatchRecord(detail)
+  const isStopwatchRunning = activeRecord != null
 
   let iconComponent: React.ReactNode = null
   if (detail.icon) {
@@ -96,9 +106,115 @@ const DidjyahCard: React.FC<DidjyahCardProps> = ({
     )
   }).length
 
+  const createInstantRecord = async (timestamp: number, noteText?: string) => {
+    const recordId = id()
+    const trimmed = noteText?.trim()
+    await db.transact(
+      db.tx.didjyahRecords[recordId]
+        .update({
+          createdDate: timestamp,
+          updatedDate: timestamp,
+          endDate: timestamp,
+          ...(trimmed ? { note: trimmed } : {}),
+        })
+        .link({ didjyah: detail.id })
+        .link({ owner: user.id }),
+    )
+    registerAction({
+      type: "create",
+      entityType: "didjyahRecords",
+      entityId: recordId,
+      links: { didjyah: detail.id, owner: user.id },
+      message: `Record added to "${detail.name}"`,
+    })
+    onRecorded?.()
+  }
+
+  const beginStopSession = (recordId: string) => {
+    if (detail.note) {
+      pendingStopRecordIdRef.current = recordId
+      noteDialogModeRef.current = "stop"
+      setNoteDialogKey((k) => k + 1)
+      setNoteDialogOpen(true)
+      return
+    }
+    void (async () => {
+      try {
+        await stopStopwatchSession({
+          recordId,
+          didjyahId: detail.id,
+          didjyahName: detail.name,
+          ownerId: user.id,
+          registerAction,
+        })
+        onRecorded?.()
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "An error occurred while stopping the session."
+        toast.error(message)
+      }
+    })()
+  }
+
+  const handleStopClick = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation()
+    if (!activeRecord) return
+    beginStopSession(activeRecord.id)
+  }
+
+  const handleDoubleTapAction = async () => {
+    if (detail.stopwatch) {
+      if (activeRecord) {
+        beginStopSession(activeRecord.id)
+        return
+      }
+      try {
+        await startStopwatchSession({
+          didjyahId: detail.id,
+          didjyahName: detail.name,
+          ownerId: user.id,
+          registerAction,
+        })
+        onRecorded?.()
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "An error occurred while starting the session."
+        toast.error(message)
+      }
+      return
+    }
+
+    const timestamp = nowMs()
+    if (detail.note) {
+      pendingTimestampRef.current = timestamp
+      noteDialogModeRef.current = "create"
+      setNoteDialogKey((k) => k + 1)
+      setNoteDialogOpen(true)
+    } else {
+      try {
+        await createInstantRecord(timestamp)
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "An error occurred while adding the record."
+        toast.error(message)
+      }
+    }
+  }
+
   const handlePlayClick = async (e?: React.MouseEvent) => {
     if (e) {
       e.stopPropagation()
+    }
+
+    if (detail.stopwatch && isStopwatchRunning) {
+      handleStopClick(e)
+      return
     }
 
     const now = nowMs()
@@ -106,40 +222,7 @@ const DidjyahCard: React.FC<DidjyahCardProps> = ({
 
     if (timeSinceLastTap < doubleTapDelay && timeSinceLastTap > 0) {
       lastTapTimeRef.current = 0
-      const timestamp = nowMs()
-      if (detail.note) {
-        pendingTimestampRef.current = timestamp
-        setNoteDialogKey((k) => k + 1)
-        setNoteDialogOpen(true)
-      } else {
-        try {
-          const recordId = id()
-          await db.transact(
-            db.tx.didjyahRecords[recordId]
-              .update({
-                createdDate: timestamp,
-                updatedDate: timestamp,
-                endDate: timestamp,
-              })
-              .link({ didjyah: detail.id })
-              .link({ owner: user.id }),
-          )
-          registerAction({
-            type: "create",
-            entityType: "didjyahRecords",
-            entityId: recordId,
-            links: { didjyah: detail.id, owner: user.id },
-            message: `Record added to "${detail.name}"`,
-          })
-          onRecorded?.()
-        } catch (error) {
-          const message =
-            error instanceof Error
-              ? error.message
-              : "An error occurred while adding the record."
-          toast.error(message)
-        }
-      }
+      await handleDoubleTapAction()
     } else {
       lastTapTimeRef.current = now
     }
@@ -164,6 +247,14 @@ const DidjyahCard: React.FC<DidjyahCardProps> = ({
         })
       : null
 
+  const showSinceLast =
+    detail.sinceLast &&
+    lastRecord?.createdDate != null &&
+    !isStopwatchRunning
+
+  const showRunningTimer =
+    isStopwatchRunning && activeRecord?.createdDate != null
+
   const isGrid = viewMode === "grid"
 
   return (
@@ -171,7 +262,7 @@ const DidjyahCard: React.FC<DidjyahCardProps> = ({
       id={`DidgYa-${detail.id}`}
       className={`relative flex overflow-hidden rounded-lg border shadow-sm ${
         isGrid ? "w-full cursor-pointer flex-col" : "w-full max-w-[450px] flex-row"
-      }`}
+      } ${isStopwatchRunning ? "ring-2 ring-red-500/40" : ""}`}
       onClick={isGrid ? (e) => void handlePlayClick(e) : undefined}
     >
       <div
@@ -205,13 +296,16 @@ const DidjyahCard: React.FC<DidjyahCardProps> = ({
                 >
                   {detail.name}
                 </span>
-                {detail.sinceLast &&
-                lastRecord &&
-                lastRecord.createdDate ? (
-                  <span className="truncate text-[8px] lg:text-xs">
+                {showRunningTimer && activeRecord?.createdDate ? (
+                  <span className="truncate text-[8px] text-red-600 lg:text-xs dark:text-red-400">
                     <SinceStopwatch
-                      startDateTime={lastRecord.createdDate}
+                      startDateTime={activeRecord.createdDate}
+                      wrapInParens={false}
                     />
+                  </span>
+                ) : showSinceLast ? (
+                  <span className="truncate text-[8px] lg:text-xs">
+                    <SinceStopwatch startDateTime={lastRecord!.createdDate} />
                   </span>
                 ) : null}
               </>
@@ -223,13 +317,16 @@ const DidjyahCard: React.FC<DidjyahCardProps> = ({
                 >
                   {detail.name}
                 </span>
-                {detail.sinceLast &&
-                lastRecord &&
-                lastRecord.createdDate ? (
-                  <span className="shrink-0 text-[10px] md:text-xs">
+                {showRunningTimer && activeRecord?.createdDate ? (
+                  <span className="shrink-0 text-[10px] text-red-600 md:text-xs dark:text-red-400">
                     <SinceStopwatch
-                      startDateTime={lastRecord.createdDate}
+                      startDateTime={activeRecord.createdDate}
+                      wrapInParens={false}
                     />
+                  </span>
+                ) : showSinceLast ? (
+                  <span className="shrink-0 text-[10px] md:text-xs">
+                    <SinceStopwatch startDateTime={lastRecord!.createdDate} />
                   </span>
                 ) : null}
               </div>
@@ -264,26 +361,33 @@ const DidjyahCard: React.FC<DidjyahCardProps> = ({
           </div>
           {!isGrid ? (
             <div className="flex items-center justify-end space-x-2 md:mt-2">
-              <span
-                id={`stop-${detail.id}`}
-                className="text-supporting-light dark:text-supporting-dark hover:text-supporting-light/80 dark:hover:text-supporting-dark/80 hidden cursor-pointer"
-              >
-                <FontAwesomeIcon
-                  className="text-2xl text-red-600 md:text-3xl"
-                  icon={["fas", "stop"]}
-                />
-              </span>
-              <Button
-                id={`play-${detail.id}`}
-                onClick={(e) => void handlePlayClick(e)}
-                variant="ghost"
-                size="icon"
-              >
-                <FontAwesomeIcon
-                  className="text-2xl text-green-600 md:text-3xl"
-                  icon={["fas", "play"]}
-                />
-              </Button>
+              {isStopwatchRunning ? (
+                <Button
+                  id={`stop-${detail.id}`}
+                  onClick={(e) => handleStopClick(e)}
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Stop"
+                >
+                  <FontAwesomeIcon
+                    className="text-2xl text-red-600 md:text-3xl"
+                    icon={["fas", "stop"]}
+                  />
+                </Button>
+              ) : (
+                <Button
+                  id={`play-${detail.id}`}
+                  onClick={(e) => void handlePlayClick(e)}
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Start"
+                >
+                  <FontAwesomeIcon
+                    className="text-2xl text-green-600 md:text-3xl"
+                    icon={["fas", "play"]}
+                  />
+                </Button>
+              )}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="icon">
@@ -394,34 +498,42 @@ const DidjyahCard: React.FC<DidjyahCardProps> = ({
         open={noteDialogOpen}
         onOpenChange={(open) => {
           setNoteDialogOpen(open)
-          if (!open) pendingTimestampRef.current = null
+          if (!open) {
+            pendingTimestampRef.current = null
+            pendingStopRecordIdRef.current = null
+          }
         }}
         didjyahName={detail.name}
         onConfirm={async (noteText) => {
+          if (noteDialogModeRef.current === "stop") {
+            const recordId = pendingStopRecordIdRef.current
+            if (!recordId) return
+            try {
+              await stopStopwatchSession({
+                recordId,
+                didjyahId: detail.id,
+                didjyahName: detail.name,
+                ownerId: user.id,
+                note: noteText,
+                registerAction,
+              })
+              pendingStopRecordIdRef.current = null
+              onRecorded?.()
+            } catch (error) {
+              const message =
+                error instanceof Error
+                  ? error.message
+                  : "An error occurred while stopping the session."
+              toast.error(message)
+              throw error
+            }
+            return
+          }
+
           const timestamp = pendingTimestampRef.current ?? nowMs()
           try {
-            const recordId = id()
-            const trimmed = noteText.trim()
-            await db.transact(
-              db.tx.didjyahRecords[recordId]
-                .update({
-                  createdDate: timestamp,
-                  updatedDate: timestamp,
-                  endDate: timestamp,
-                  ...(trimmed ? { note: trimmed } : {}),
-                })
-                .link({ didjyah: detail.id })
-                .link({ owner: user.id }),
-            )
+            await createInstantRecord(timestamp, noteText)
             pendingTimestampRef.current = null
-            registerAction({
-              type: "create",
-              entityType: "didjyahRecords",
-              entityId: recordId,
-              links: { didjyah: detail.id, owner: user.id },
-              message: `Record added to "${detail.name}"`,
-            })
-            onRecorded?.()
           } catch (error) {
             const message =
               error instanceof Error

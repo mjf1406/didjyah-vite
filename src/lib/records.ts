@@ -14,14 +14,47 @@ export function getOneYearAgoMs(at: Date = new Date()): number {
   return d.getTime()
 }
 
-/** Nested `records` filter for the home list query. */
-export function homeRecordsWhere(todayStartMs: number) {
+/** Top-level where for today's records on the home page. */
+export function homeTodayRecordsWhere(ownerId: string, todayStartMs: number) {
   return {
-    or: [
-      { createdDate: { $gte: todayStartMs } },
-      { endDate: { $isNull: true } },
-    ],
+    "owner.id": ownerId,
+    createdDate: { $gte: todayStartMs },
   }
+}
+
+/** Top-level where for running stopwatch records on the home page. */
+export function homeActiveStopwatchRecordsWhere(ownerId: string) {
+  return {
+    "owner.id": ownerId,
+    endDate: { $isNull: true },
+  }
+}
+
+/** Merge home record sets by didjyah, de-duplicating by record id. */
+export function groupHomeRecordsByDidjyahId<
+  T extends { id: string; didjyah?: { id: string } | null },
+>(...recordSets: T[][]): Map<string, T[]> {
+  const byDidjyah = new Map<string, Map<string, T>>()
+
+  for (const records of recordSets) {
+    for (const record of records) {
+      const didjyahId = record.didjyah?.id
+      if (!didjyahId) continue
+
+      let recordsById = byDidjyah.get(didjyahId)
+      if (!recordsById) {
+        recordsById = new Map()
+        byDidjyah.set(didjyahId, recordsById)
+      }
+      recordsById.set(record.id, record)
+    }
+  }
+
+  const grouped = new Map<string, T[]>()
+  for (const [didjyahId, recordsById] of byDidjyah) {
+    grouped.set(didjyahId, Array.from(recordsById.values()))
+  }
+  return grouped
 }
 
 export function lastRecordedAtUpdateTx(didjyahId: string, timestamp: number) {

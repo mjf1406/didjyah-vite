@@ -1,7 +1,12 @@
 import React, { useMemo } from "react"
 import { db } from "@/lib/db"
 import { getErrorMessage } from "@/lib/errors"
-import { getTodayStartMs, homeRecordsWhere } from "@/lib/records"
+import {
+  getTodayStartMs,
+  groupHomeRecordsByDidjyahId,
+  homeActiveStopwatchRecordsWhere,
+  homeTodayRecordsWhere,
+} from "@/lib/records"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { CircleX } from "lucide-react"
 import DidjyahCard from "@/components/didjyah/DidjyahCard"
@@ -15,28 +20,61 @@ import type { InstaQLEntity } from "@instantdb/react"
 import type { AppSchema } from "@/instant.schema"
 
 /* eslint-disable @typescript-eslint/no-empty-object-type -- InstaQL nested link shapes */
+type DidjyahRow = InstaQLEntity<AppSchema, "didjyahs", { folder: {} }>
+
 type DidjyahWithRecords = InstaQLEntity<
   AppSchema,
   "didjyahs",
-  { owner: {}; records: {}; folder: {} }
+  { records: {}; folder: {} }
 >
 
 type DidjyahFolderRow = InstaQLEntity<AppSchema, "didjyahFolders", { owner: {} }>
+
+type HomeRecordRow = InstaQLEntity<AppSchema, "didjyahRecords", { didjyah: {} }>
 /* eslint-enable @typescript-eslint/no-empty-object-type */
+
+function HomeQueryError({
+  label,
+  error,
+}: {
+  label: string
+  error: unknown
+}) {
+  return (
+    <div className="m-auto flex h-auto w-full items-center justify-center">
+      <div className="max-w-5xl px-4">
+        <Alert
+          variant="destructive"
+          className="flex w-full items-center gap-4"
+        >
+          <CircleX
+            className="shrink-0"
+            style={{ width: "36px", height: "36px" }}
+          />
+          <div className="w-full">
+            <AlertTitle>Error</AlertTitle>
+            <AlertDescription>
+              {label}: {getErrorMessage(error)}
+            </AlertDescription>
+          </div>
+        </Alert>
+      </div>
+    </div>
+  )
+}
 
 const DidjyahList: React.FC = () => {
   const user = db.useUser()
   const [viewMode] = useViewMode()
   const todayStartMs = useMemo(() => getTodayStartMs(), [])
 
-  const { data, isLoading, error } = db.useQuery({
+  const {
+    data: entitiesData,
+    isLoading: entitiesLoading,
+    error: entitiesError,
+  } = db.useQuery({
     didjyahs: {
       $: { where: { "owner.id": user.id } },
-      records: {
-        $: {
-          where: homeRecordsWhere(todayStartMs),
-        },
-      },
       folder: {},
     },
     didjyahFolders: {
@@ -44,13 +82,58 @@ const DidjyahList: React.FC = () => {
     },
   })
 
-  const didjyahsFromQuery = (data?.didjyahs || []) as DidjyahWithRecords[]
+  const {
+    data: todayRecordsData,
+    isLoading: todayRecordsLoading,
+    error: todayRecordsError,
+  } = db.useQuery({
+    didjyahRecords: {
+      $: {
+        where: homeTodayRecordsWhere(user.id, todayStartMs),
+      },
+      didjyah: {},
+    },
+  })
+
+  const {
+    data: activeRecordsData,
+    isLoading: activeRecordsLoading,
+    error: activeRecordsError,
+  } = db.useQuery({
+    didjyahRecords: {
+      $: {
+        where: homeActiveStopwatchRecordsWhere(user.id),
+      },
+      didjyah: {},
+    },
+  })
+
+  const didjyahsWithRecords = useMemo(() => {
+    const didjyahs = (entitiesData?.didjyahs || []) as DidjyahRow[]
+    const todayRecords = (todayRecordsData?.didjyahRecords ||
+      []) as HomeRecordRow[]
+    const activeRecords = (activeRecordsData?.didjyahRecords ||
+      []) as HomeRecordRow[]
+
+    const recordsByDidjyahId = groupHomeRecordsByDidjyahId(
+      todayRecords,
+      activeRecords,
+    )
+
+    return didjyahs.map(
+      (didjyah): DidjyahWithRecords => ({
+        ...didjyah,
+        records: recordsByDidjyahId.get(didjyah.id) ?? [],
+      }),
+    )
+  }, [entitiesData?.didjyahs, todayRecordsData?.didjyahRecords, activeRecordsData?.didjyahRecords])
+
   const activeSessions = useMemo(
-    () => collectActiveStopwatchSessions(didjyahsFromQuery),
-    [didjyahsFromQuery],
+    () => collectActiveStopwatchSessions(didjyahsWithRecords),
+    [didjyahsWithRecords],
   )
 
-  if (isLoading) {
+  if (entitiesLoading || todayRecordsLoading || activeRecordsLoading) {
     return (
       <div className="m-auto flex w-full max-w-4xl items-center justify-center lg:min-w-3xl">
         <Skeleton className="h-8 w-32" />
@@ -58,30 +141,27 @@ const DidjyahList: React.FC = () => {
     )
   }
 
-  if (error) {
+  if (entitiesError) {
+    return <HomeQueryError label="Failed to load didjyahs" error={entitiesError} />
+  }
+
+  if (todayRecordsError) {
     return (
-      <div className="m-auto flex h-auto w-full items-center justify-center">
-        <div className="max-w-5xl px-4">
-          <Alert
-            variant="destructive"
-            className="flex w-full items-center gap-4"
-          >
-            <CircleX
-              className="shrink-0"
-              style={{ width: "36px", height: "36px" }}
-            />
-            <div className="w-full">
-              <AlertTitle>Error</AlertTitle>
-              <AlertDescription>{getErrorMessage(error)}</AlertDescription>
-            </div>
-          </Alert>
-        </div>
-      </div>
+      <HomeQueryError label="Failed to load today's records" error={todayRecordsError} />
     )
   }
 
-  const didjyahs = didjyahsFromQuery
-  const folders = ((data?.didjyahFolders || []) as DidjyahFolderRow[]).slice()
+  if (activeRecordsError) {
+    return (
+      <HomeQueryError
+        label="Failed to load active stopwatch sessions"
+        error={activeRecordsError}
+      />
+    )
+  }
+
+  const didjyahs = didjyahsWithRecords
+  const folders = ((entitiesData?.didjyahFolders || []) as DidjyahFolderRow[]).slice()
   folders.sort((a, b) => a.name.localeCompare(b.name))
 
   if (didjyahs.length === 0 && folders.length === 0) {

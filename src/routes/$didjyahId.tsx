@@ -16,11 +16,13 @@ import StreakTracker from "@/components/dashboard/StreakTracker"
 import GoalProgress from "@/components/dashboard/GoalProgress"
 import RecordsList from "@/components/dashboard/RecordsList"
 
+/* eslint-disable @typescript-eslint/no-empty-object-type -- InstaQL nested link shapes */
 type DidjyahWithRecords = InstaQLEntity<
   AppSchema,
   "didjyahs",
   { owner: {}; records: {} }
 >
+/* eslint-enable @typescript-eslint/no-empty-object-type */
 
 export const Route = createFileRoute("/$didjyahId")({
   component: DidjyahDashboardRoute,

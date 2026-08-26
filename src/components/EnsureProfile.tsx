@@ -16,13 +16,14 @@ export default function EnsureProfile({ defaults }: EnsureProfileProps) {
     profiles: { $: { where: { "user.id": user.id } } },
   })
   const createdRef = React.useRef(false)
+  const profiles = data?.profiles
 
   React.useEffect(() => {
     if (createdRef.current) return
     if (!user?.id) return
     if (user.isGuest) return
     if (isLoading) return
-    const existing = data?.profiles?.[0]
+    const existing = profiles?.[0]
     if (existing) return
 
     createdRef.current = true
@@ -44,7 +45,7 @@ export default function EnsureProfile({ defaults }: EnsureProfileProps) {
     ).catch(() => {
       createdRef.current = false
     })
-  }, [user?.id, user?.isGuest, isLoading, data?.profiles?.[0]?.id, defaults])
+  }, [user?.id, user?.isGuest, isLoading, profiles, defaults])
 
   if (error) return null
   return null

@@ -18,11 +18,13 @@ import { Trash } from "lucide-react"
 import type { InstaQLEntity } from "@instantdb/react"
 import type { AppSchema } from "@/instant.schema"
 
+/* eslint-disable @typescript-eslint/no-empty-object-type -- InstaQL nested link shapes */
 type DidjyahWithRecords = InstaQLEntity<
   AppSchema,
   "didjyahs",
   { records: {} }
 >
+/* eslint-enable @typescript-eslint/no-empty-object-type */
 
 interface DeleteDidjyahAlertDialogProps {
   detail: DidjyahWithRecords

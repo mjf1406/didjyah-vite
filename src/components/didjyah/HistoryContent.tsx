@@ -43,13 +43,15 @@ import type { InstaQLEntity } from "@instantdb/react";
 import type { AppSchema } from "@/instant.schema";
 import { RecordDurationDisplay } from "@/components/didjyah/RecordDurationDisplay";
 
+/* eslint-disable @typescript-eslint/no-empty-object-type -- InstaQL nested link shapes */
 type DidjyahRecordWithDidjyah = InstaQLEntity<
   AppSchema,
   "didjyahRecords",
   { didjyah: {}; owner: {} }
 >
+/* eslint-enable @typescript-eslint/no-empty-object-type */
 
-type Didjyah = InstaQLEntity<AppSchema, "didjyahs", {}>
+type Didjyah = InstaQLEntity<AppSchema, "didjyahs">
 
 const PAGE_SIZE = 20;
 

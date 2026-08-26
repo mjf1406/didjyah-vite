@@ -14,47 +14,42 @@ export function getOneYearAgoMs(at: Date = new Date()): number {
   return d.getTime()
 }
 
-/** Top-level where for today's records on the home page. */
-export function homeTodayRecordsWhere(ownerId: string, todayStartMs: number) {
+/** Today's records for one didjyah on the home page. */
+export function homeDidjyahTodayRecordsWhere(
+  ownerId: string,
+  didjyahId: string,
+  todayStartMs: number,
+) {
   return {
     "owner.id": ownerId,
+    "didjyah.id": didjyahId,
     createdDate: { $gte: todayStartMs },
   }
 }
 
-/** Top-level where for running stopwatch records on the home page. */
-export function homeActiveStopwatchRecordsWhere(ownerId: string) {
+/** Running stopwatch records for one didjyah on the home page. */
+export function homeDidjyahActiveRecordsWhere(
+  ownerId: string,
+  didjyahId: string,
+) {
   return {
     "owner.id": ownerId,
+    "didjyah.id": didjyahId,
     endDate: { $isNull: true },
   }
 }
 
-/** Merge home record sets by didjyah, de-duplicating by record id. */
-export function groupHomeRecordsByDidjyahId<
-  T extends { id: string; didjyah?: { id: string } | null },
->(...recordSets: T[][]): Map<string, T[]> {
-  const byDidjyah = new Map<string, Map<string, T>>()
-
+/** Merge record arrays by record id. */
+export function mergeRecordsById<
+  T extends { id: string },
+>(...recordSets: T[][]): T[] {
+  const byId = new Map<string, T>()
   for (const records of recordSets) {
     for (const record of records) {
-      const didjyahId = record.didjyah?.id
-      if (!didjyahId) continue
-
-      let recordsById = byDidjyah.get(didjyahId)
-      if (!recordsById) {
-        recordsById = new Map()
-        byDidjyah.set(didjyahId, recordsById)
-      }
-      recordsById.set(record.id, record)
+      byId.set(record.id, record)
     }
   }
-
-  const grouped = new Map<string, T[]>()
-  for (const [didjyahId, recordsById] of byDidjyah) {
-    grouped.set(didjyahId, Array.from(recordsById.values()))
-  }
-  return grouped
+  return Array.from(byId.values())
 }
 
 export function lastRecordedAtUpdateTx(didjyahId: string, timestamp: number) {

@@ -21,15 +21,15 @@ import type { InstaQLEntity } from "@instantdb/react"
 import type { AppSchema } from "@/instant.schema"
 import EditFolderDialog from "@/components/didjyah/EditFolderDialog"
 import DeleteFolderAlertDialog from "@/components/didjyah/DeleteFolderAlertDialog"
+import DidjyahRecordsSubscriber from "@/components/didjyah/DidjyahRecordsSubscriber"
 import DidjyahCard from "@/components/didjyah/DidjyahCard"
+import DidjyahCardSkeleton from "@/components/didjyah/DidjyahCardSkeleton"
+import DidjyahCardLoadError from "@/components/didjyah/DidjyahCardLoadError"
+import type { DidjyahCardLoadState } from "@/components/didjyah/DidjyahCardWithRecords"
+import type { DidjyahRow } from "@/components/didjyah/DidjyahCardWithRecords"
 
 /* eslint-disable @typescript-eslint/no-empty-object-type -- InstaQL nested link shapes */
 type DidjyahFolderEntity = InstaQLEntity<AppSchema, "didjyahFolders", {}>
-type DidjyahInFolder = InstaQLEntity<
-  AppSchema,
-  "didjyahs",
-  { records: {}; folder: {} }
->
 /* eslint-enable @typescript-eslint/no-empty-object-type */
 
 function isNestedOverlayTarget(target: HTMLElement | null) {
@@ -104,8 +104,12 @@ function FolderActionsDropdown({
 interface FolderCardProps {
   folder: DidjyahFolderEntity
   /** DidjYahs in this folder (sorted). */
-  folderDidjyahs: DidjyahInFolder[]
+  folderDidjyahs: DidjyahRow[]
   viewMode?: "list" | "grid"
+  ownerId: string
+  todayStartMs: number
+  didjyahLoadStates: Map<string, DidjyahCardLoadState>
+  onDidjyahLoadStateChange?: (state: DidjyahCardLoadState) => void
 }
 
 function folderIcon(
@@ -139,6 +143,10 @@ const FolderCard: React.FC<FolderCardProps> = ({
   folder,
   folderDidjyahs,
   viewMode = "list",
+  ownerId,
+  todayStartMs,
+  didjyahLoadStates,
+  onDidjyahLoadStateChange,
 }) => {
   const [open, setOpen] = React.useState(false)
   const [editDialogOpen, setEditDialogOpen] = React.useState(false)
@@ -149,7 +157,17 @@ const FolderCard: React.FC<FolderCardProps> = ({
   const countLabel = childCount === 1 ? "1 DidjYah" : `${childCount} DidjYahs`
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <>
+      {folderDidjyahs.map((item) => (
+        <DidjyahRecordsSubscriber
+          key={`${item.id}-records`}
+          didjyah={item}
+          ownerId={ownerId}
+          todayStartMs={todayStartMs}
+          onLoadStateChange={onDidjyahLoadStateChange}
+        />
+      ))}
+      <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <div
           id={`Folder-${folder.id}`}
@@ -297,14 +315,35 @@ const FolderCard: React.FC<FolderCardProps> = ({
             </p>
           ) : (
             <div className="grid grid-cols-3 gap-2">
-              {folderDidjyahs.map((item) => (
-                <DidjyahCard
-                  key={item.id}
-                  detail={item}
-                  viewMode="grid"
-                  onRecorded={() => setOpen(false)}
-                />
-              ))}
+              {folderDidjyahs.map((item) => {
+                const loadState = didjyahLoadStates.get(item.id)
+
+                if (!loadState || loadState.status === "loading") {
+                  return (
+                    <DidjyahCardSkeleton key={item.id} viewMode="grid" />
+                  )
+                }
+
+                if (loadState.status === "error") {
+                  return (
+                    <DidjyahCardLoadError
+                      key={item.id}
+                      name={item.name}
+                      error={loadState.error}
+                      viewMode="grid"
+                    />
+                  )
+                }
+
+                return (
+                  <DidjyahCard
+                    key={item.id}
+                    detail={loadState.didjyah}
+                    viewMode="grid"
+                    onRecorded={() => setOpen(false)}
+                  />
+                )
+              })}
             </div>
           )}
         </div>
@@ -321,6 +360,7 @@ const FolderCard: React.FC<FolderCardProps> = ({
         onOpenChange={setDeleteDialogOpen}
       />
     </Popover>
+    </>
   )
 }
 

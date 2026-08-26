@@ -33,11 +33,13 @@ import { RecordDurationDisplay } from "@/components/didjyah/RecordDurationDispla
 
 const PAGE_SIZE = 20
 
+/* eslint-disable @typescript-eslint/no-empty-object-type -- InstaQL nested link shapes */
 type DidjyahRecordWithLinks = InstaQLEntity<
   AppSchema,
   "didjyahRecords",
   { didjyah: {}; owner: {} }
 >
+/* eslint-enable @typescript-eslint/no-empty-object-type */
 
 interface RecordsListProps {
   didjyah: {

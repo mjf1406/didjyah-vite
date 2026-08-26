@@ -33,11 +33,13 @@ import {
 import type { InstaQLEntity } from "@instantdb/react"
 import type { AppSchema } from "@/instant.schema"
 
+/* eslint-disable @typescript-eslint/no-empty-object-type -- InstaQL nested link shapes */
 type DidjyahWithRecords = InstaQLEntity<
   AppSchema,
   "didjyahs",
   { records: {} }
 >
+/* eslint-enable @typescript-eslint/no-empty-object-type */
 
 const customDidjyahSchema = z.object({
   dateTime: z.string().min(1, "Date and time are required"),

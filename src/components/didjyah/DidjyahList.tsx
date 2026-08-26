@@ -1,16 +1,14 @@
-import React, { useMemo } from "react"
+import React, { useCallback, useMemo, useState } from "react"
 import { db } from "@/lib/db"
 import { getErrorMessage } from "@/lib/errors"
-import {
-  getTodayStartMs,
-  groupHomeRecordsByDidjyahId,
-  homeActiveStopwatchRecordsWhere,
-  homeTodayRecordsWhere,
-} from "@/lib/records"
+import { getTodayStartMs } from "@/lib/records"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { CircleX } from "lucide-react"
-import DidjyahCard from "@/components/didjyah/DidjyahCard"
 import FolderCard from "@/components/didjyah/FolderCard"
+import DidjyahCardWithRecords, {
+  type DidjyahCardLoadState,
+  type DidjyahRow,
+} from "@/components/didjyah/DidjyahCardWithRecords"
 import { Skeleton } from "@/components/ui/skeleton"
 import NoDidjyahsCard from "@/components/didjyah/NoDidjyahsCard"
 import ActiveStopwatchBar from "@/components/didjyah/ActiveStopwatchBar"
@@ -20,17 +18,7 @@ import type { InstaQLEntity } from "@instantdb/react"
 import type { AppSchema } from "@/instant.schema"
 
 /* eslint-disable @typescript-eslint/no-empty-object-type -- InstaQL nested link shapes */
-type DidjyahRow = InstaQLEntity<AppSchema, "didjyahs", { folder: {} }>
-
-type DidjyahWithRecords = InstaQLEntity<
-  AppSchema,
-  "didjyahs",
-  { records: {}; folder: {} }
->
-
 type DidjyahFolderRow = InstaQLEntity<AppSchema, "didjyahFolders", { owner: {} }>
-
-type HomeRecordRow = InstaQLEntity<AppSchema, "didjyahRecords", { didjyah: {} }>
 /* eslint-enable @typescript-eslint/no-empty-object-type */
 
 function HomeQueryError({
@@ -67,6 +55,17 @@ const DidjyahList: React.FC = () => {
   const user = db.useUser()
   const [viewMode] = useViewMode()
   const todayStartMs = useMemo(() => getTodayStartMs(), [])
+  const [loadStates, setLoadStates] = useState<
+    Map<string, DidjyahCardLoadState>
+  >(() => new Map())
+
+  const handleLoadStateChange = useCallback((state: DidjyahCardLoadState) => {
+    setLoadStates((previous) => {
+      const next = new Map(previous)
+      next.set(state.didjyahId, state)
+      return next
+    })
+  }, [])
 
   const {
     data: entitiesData,
@@ -82,58 +81,15 @@ const DidjyahList: React.FC = () => {
     },
   })
 
-  const {
-    data: todayRecordsData,
-    isLoading: todayRecordsLoading,
-    error: todayRecordsError,
-  } = db.useQuery({
-    didjyahRecords: {
-      $: {
-        where: homeTodayRecordsWhere(user.id, todayStartMs),
-      },
-      didjyah: {},
-    },
-  })
+  const activeSessions = useMemo(() => {
+    const readyDidjyahs = Array.from(loadStates.values())
+      .filter((state) => state.status === "ready")
+      .map((state) => state.didjyah)
 
-  const {
-    data: activeRecordsData,
-    isLoading: activeRecordsLoading,
-    error: activeRecordsError,
-  } = db.useQuery({
-    didjyahRecords: {
-      $: {
-        where: homeActiveStopwatchRecordsWhere(user.id),
-      },
-      didjyah: {},
-    },
-  })
+    return collectActiveStopwatchSessions(readyDidjyahs)
+  }, [loadStates])
 
-  const didjyahsWithRecords = useMemo(() => {
-    const didjyahs = (entitiesData?.didjyahs || []) as DidjyahRow[]
-    const todayRecords = (todayRecordsData?.didjyahRecords ||
-      []) as HomeRecordRow[]
-    const activeRecords = (activeRecordsData?.didjyahRecords ||
-      []) as HomeRecordRow[]
-
-    const recordsByDidjyahId = groupHomeRecordsByDidjyahId(
-      todayRecords,
-      activeRecords,
-    )
-
-    return didjyahs.map(
-      (didjyah): DidjyahWithRecords => ({
-        ...didjyah,
-        records: recordsByDidjyahId.get(didjyah.id) ?? [],
-      }),
-    )
-  }, [entitiesData?.didjyahs, todayRecordsData?.didjyahRecords, activeRecordsData?.didjyahRecords])
-
-  const activeSessions = useMemo(
-    () => collectActiveStopwatchSessions(didjyahsWithRecords),
-    [didjyahsWithRecords],
-  )
-
-  if (entitiesLoading || todayRecordsLoading || activeRecordsLoading) {
+  if (entitiesLoading) {
     return (
       <div className="m-auto flex w-full max-w-4xl items-center justify-center lg:min-w-3xl">
         <Skeleton className="h-8 w-32" />
@@ -145,22 +101,7 @@ const DidjyahList: React.FC = () => {
     return <HomeQueryError label="Failed to load didjyahs" error={entitiesError} />
   }
 
-  if (todayRecordsError) {
-    return (
-      <HomeQueryError label="Failed to load today's records" error={todayRecordsError} />
-    )
-  }
-
-  if (activeRecordsError) {
-    return (
-      <HomeQueryError
-        label="Failed to load active stopwatch sessions"
-        error={activeRecordsError}
-      />
-    )
-  }
-
-  const didjyahs = didjyahsWithRecords
+  const didjyahs = (entitiesData?.didjyahs || []) as DidjyahRow[]
   const folders = ((entitiesData?.didjyahFolders || []) as DidjyahFolderRow[]).slice()
   folders.sort((a, b) => a.name.localeCompare(b.name))
 
@@ -174,21 +115,20 @@ const DidjyahList: React.FC = () => {
     )
   }
 
-  const folderMap = new Map<string, DidjyahWithRecords[]>()
-  for (const d of didjyahs) {
-    const fid = d.folder?.id
-    if (fid) {
-      const list = folderMap.get(fid) ?? []
-      list.push(d)
-      folderMap.set(fid, list)
+  const folderMap = new Map<string, DidjyahRow[]>()
+  for (const didjyah of didjyahs) {
+    const folderId = didjyah.folder?.id
+    if (folderId) {
+      const list = folderMap.get(folderId) ?? []
+      list.push(didjyah)
+      folderMap.set(folderId, list)
     }
   }
   for (const list of folderMap.values()) {
     list.sort((a, b) => a.name.localeCompare(b.name))
   }
 
-  const unfolderedDidjyahs = didjyahs.filter((d) => !d.folder)
-
+  const unfolderedDidjyahs = didjyahs.filter((didjyah) => !didjyah.folder)
   const isGridView = viewMode === "grid"
 
   const activeBarScrollPadding =
@@ -228,10 +168,21 @@ const DidjyahList: React.FC = () => {
             folder={folder}
             folderDidjyahs={folderMap.get(folder.id) ?? []}
             viewMode={viewMode}
+            ownerId={user.id}
+            todayStartMs={todayStartMs}
+            didjyahLoadStates={loadStates}
+            onDidjyahLoadStateChange={handleLoadStateChange}
           />
         ))}
-        {unfolderedDidjyahs.map((item) => (
-          <DidjyahCard key={item.id} detail={item} viewMode={viewMode} />
+        {unfolderedDidjyahs.map((didjyah) => (
+          <DidjyahCardWithRecords
+            key={didjyah.id}
+            didjyah={didjyah}
+            ownerId={user.id}
+            todayStartMs={todayStartMs}
+            viewMode={viewMode}
+            onLoadStateChange={handleLoadStateChange}
+          />
         ))}
       </div>
       {activeSessions.length > 0 ? (

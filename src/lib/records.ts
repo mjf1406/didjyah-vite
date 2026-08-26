@@ -39,6 +39,94 @@ export function homeDidjyahActiveRecordsWhere(
   }
 }
 
+/** Today's records for all didjyahs owned by a user on the home page. */
+export function homeOwnerTodayRecordsWhere(
+  ownerId: string,
+  todayStartMs: number,
+) {
+  return {
+    "owner.id": ownerId,
+    createdDate: { $gte: todayStartMs },
+  }
+}
+
+/** Running stopwatch records for all didjyahs owned by a user on the home page. */
+export function homeOwnerActiveRecordsWhere(ownerId: string) {
+  return {
+    "owner.id": ownerId,
+    endDate: { $isNull: true },
+  }
+}
+
+/** Group home record rows by linked didjyah id. */
+export function groupHomeRecordsByDidjyahId<
+  T extends { id: string; didjyah?: { id: string } | null },
+>(records: T[]): Map<string, T[]> {
+  const byDidjyahId = new Map<string, T[]>()
+  for (const record of records) {
+    const didjyahId = record.didjyah?.id
+    if (!didjyahId) continue
+    const list = byDidjyahId.get(didjyahId) ?? []
+    list.push(record)
+    byDidjyahId.set(didjyahId, list)
+  }
+  return byDidjyahId
+}
+
+const lastRecordedAtBackfillAttempted = new Set<string>()
+
+type LastRecordedAtBackfillCandidate = {
+  id: string
+  sinceLast?: boolean | null
+  lastRecordedAt?: number | null
+}
+
+/** One-shot backfill for legacy didjyahs missing `lastRecordedAt`. */
+export async function backfillLastRecordedAtIfNeeded(
+  didjyah: LastRecordedAtBackfillCandidate,
+  ownerId: string,
+): Promise<void> {
+  if (!didjyah.sinceLast || didjyah.lastRecordedAt != null) return
+  if (lastRecordedAtBackfillAttempted.has(didjyah.id)) return
+
+  lastRecordedAtBackfillAttempted.add(didjyah.id)
+
+  try {
+    const result = await db.queryOnce({
+      didjyahRecords: {
+        $: {
+          where: {
+            "didjyah.id": didjyah.id,
+            "owner.id": ownerId,
+          },
+          order: { createdDate: "desc" },
+          limit: 1,
+        },
+      },
+    })
+
+    const latestCreatedDate = result.data?.didjyahRecords?.[0]?.createdDate
+    if (latestCreatedDate == null) return
+
+    await db.transact(lastRecordedAtUpdateTx(didjyah.id, latestCreatedDate))
+  } catch (error) {
+    console.error(
+      `Failed to backfill lastRecordedAt for didjyah ${didjyah.id}:`,
+      error,
+    )
+  }
+}
+
+/** Sequential backfill for all didjyahs that still need `lastRecordedAt`. */
+export async function backfillLastRecordedAtBatch(
+  didjyahs: LastRecordedAtBackfillCandidate[],
+  ownerId: string,
+): Promise<void> {
+  for (const didjyah of didjyahs) {
+    await backfillLastRecordedAtIfNeeded(didjyah, ownerId)
+  }
+}
+
 /** Merge record arrays by record id. */
 export function mergeRecordsById<
   T extends { id: string },

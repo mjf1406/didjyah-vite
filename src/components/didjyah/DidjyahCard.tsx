@@ -67,35 +67,6 @@ const DidjyahCard: React.FC<DidjyahCardProps> = ({
   const activeRecord = getActiveStopwatchRecord(detail)
   const isStopwatchRunning = activeRecord != null
 
-  React.useEffect(() => {
-    if (!detail.sinceLast || detail.lastRecordedAt != null) return
-
-    let cancelled = false
-    void (async () => {
-      const result = await db.queryOnce({
-        didjyahRecords: {
-          $: {
-            where: {
-              "didjyah.id": detail.id,
-              "owner.id": user.id,
-            },
-            order: { createdDate: "desc" },
-            limit: 1,
-          },
-        },
-      })
-
-      const latestCreatedDate = result.data?.didjyahRecords?.[0]?.createdDate
-      if (cancelled || latestCreatedDate == null) return
-
-      await db.transact(lastRecordedAtUpdateTx(detail.id, latestCreatedDate))
-    })()
-
-    return () => {
-      cancelled = true
-    }
-  }, [detail.id, detail.sinceLast, detail.lastRecordedAt, user.id])
-
   let iconComponent: React.ReactNode = null
   if (detail.icon) {
     const parts = detail.icon.split("|")

@@ -21,12 +21,11 @@ import type { InstaQLEntity } from "@instantdb/react"
 import type { AppSchema } from "@/instant.schema"
 import EditFolderDialog from "@/components/didjyah/EditFolderDialog"
 import DeleteFolderAlertDialog from "@/components/didjyah/DeleteFolderAlertDialog"
-import DidjyahRecordsSubscriber from "@/components/didjyah/DidjyahRecordsSubscriber"
-import DidjyahCard from "@/components/didjyah/DidjyahCard"
-import DidjyahCardSkeleton from "@/components/didjyah/DidjyahCardSkeleton"
-import DidjyahCardLoadError from "@/components/didjyah/DidjyahCardLoadError"
-import type { DidjyahCardLoadState } from "@/components/didjyah/DidjyahCardWithRecords"
-import type { DidjyahRow } from "@/components/didjyah/DidjyahCardWithRecords"
+import DidjyahCardWithRecords from "@/components/didjyah/DidjyahCardWithRecords"
+import type {
+  DidjyahCardLoadState,
+  DidjyahRow,
+} from "@/components/didjyah/homeRecordState"
 
 /* eslint-disable @typescript-eslint/no-empty-object-type -- InstaQL nested link shapes */
 type DidjyahFolderEntity = InstaQLEntity<AppSchema, "didjyahFolders", {}>
@@ -106,10 +105,7 @@ interface FolderCardProps {
   /** DidjYahs in this folder (sorted). */
   folderDidjyahs: DidjyahRow[]
   viewMode?: "list" | "grid"
-  ownerId: string
-  todayStartMs: number
   didjyahLoadStates: Map<string, DidjyahCardLoadState>
-  onDidjyahLoadStateChange?: (state: DidjyahCardLoadState) => void
 }
 
 function folderIcon(
@@ -143,10 +139,7 @@ const FolderCard: React.FC<FolderCardProps> = ({
   folder,
   folderDidjyahs,
   viewMode = "list",
-  ownerId,
-  todayStartMs,
   didjyahLoadStates,
-  onDidjyahLoadStateChange,
 }) => {
   const [open, setOpen] = React.useState(false)
   const [editDialogOpen, setEditDialogOpen] = React.useState(false)
@@ -158,15 +151,6 @@ const FolderCard: React.FC<FolderCardProps> = ({
 
   return (
     <>
-      {folderDidjyahs.map((item) => (
-        <DidjyahRecordsSubscriber
-          key={`${item.id}-records`}
-          didjyah={item}
-          ownerId={ownerId}
-          todayStartMs={todayStartMs}
-          onLoadStateChange={onDidjyahLoadStateChange}
-        />
-      ))}
       <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <div
@@ -315,35 +299,15 @@ const FolderCard: React.FC<FolderCardProps> = ({
             </p>
           ) : (
             <div className="grid grid-cols-3 gap-2">
-              {folderDidjyahs.map((item) => {
-                const loadState = didjyahLoadStates.get(item.id)
-
-                if (!loadState || loadState.status === "loading") {
-                  return (
-                    <DidjyahCardSkeleton key={item.id} viewMode="grid" />
-                  )
-                }
-
-                if (loadState.status === "error") {
-                  return (
-                    <DidjyahCardLoadError
-                      key={item.id}
-                      name={item.name}
-                      error={loadState.error}
-                      viewMode="grid"
-                    />
-                  )
-                }
-
-                return (
-                  <DidjyahCard
-                    key={item.id}
-                    detail={loadState.didjyah}
-                    viewMode="grid"
-                    onRecorded={() => setOpen(false)}
-                  />
-                )
-              })}
+              {folderDidjyahs.map((item) => (
+                <DidjyahCardWithRecords
+                  key={item.id}
+                  loadState={didjyahLoadStates.get(item.id)}
+                  fallbackName={item.name}
+                  viewMode="grid"
+                  onRecorded={() => setOpen(false)}
+                />
+              ))}
             </div>
           )}
         </div>

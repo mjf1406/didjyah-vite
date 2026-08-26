@@ -1,14 +1,16 @@
-import React, { useCallback, useMemo, useState } from "react"
+import React, { useEffect, useMemo, useRef } from "react"
 import { db } from "@/lib/db"
 import { getErrorMessage } from "@/lib/errors"
-import { getTodayStartMs } from "@/lib/records"
+import { backfillLastRecordedAtBatch, getTodayStartMs } from "@/lib/records"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { CircleX } from "lucide-react"
 import FolderCard from "@/components/didjyah/FolderCard"
-import DidjyahCardWithRecords, {
-  type DidjyahCardLoadState,
+import DidjyahCardWithRecords from "@/components/didjyah/DidjyahCardWithRecords"
+import {
+  buildDidjyahLoadStates,
   type DidjyahRow,
-} from "@/components/didjyah/DidjyahCardWithRecords"
+  useHomeOwnerRecords,
+} from "@/components/didjyah/homeRecordState"
 import { Skeleton } from "@/components/ui/skeleton"
 import NoDidjyahsCard from "@/components/didjyah/NoDidjyahsCard"
 import ActiveStopwatchBar from "@/components/didjyah/ActiveStopwatchBar"
@@ -53,19 +55,10 @@ function HomeQueryError({
 
 const DidjyahList: React.FC = () => {
   const user = db.useUser()
+  const connectionStatus = db.useConnectionStatus()
   const [viewMode] = useViewMode()
   const todayStartMs = useMemo(() => getTodayStartMs(), [])
-  const [loadStates, setLoadStates] = useState<
-    Map<string, DidjyahCardLoadState>
-  >(() => new Map())
-
-  const handleLoadStateChange = useCallback((state: DidjyahCardLoadState) => {
-    setLoadStates((previous) => {
-      const next = new Map(previous)
-      next.set(state.didjyahId, state)
-      return next
-    })
-  }, [])
+  const backfillStartedRef = useRef(false)
 
   const {
     data: entitiesData,
@@ -80,6 +73,57 @@ const DidjyahList: React.FC = () => {
       $: { where: { "owner.id": user.id } },
     },
   })
+
+  const {
+    recordsByDidjyahId,
+    isLoading: recordsLoading,
+    error: recordsError,
+  } = useHomeOwnerRecords(user.id, todayStartMs)
+
+  const didjyahs = useMemo(
+    () => (entitiesData?.didjyahs || []) as DidjyahRow[],
+    [entitiesData?.didjyahs],
+  )
+
+  const hasCachedRecords = recordsByDidjyahId.size > 0
+
+  const loadStates = useMemo(
+    () =>
+      buildDidjyahLoadStates(
+        didjyahs,
+        recordsByDidjyahId,
+        recordsLoading,
+        recordsError,
+        hasCachedRecords,
+      ),
+    [
+      didjyahs,
+      recordsByDidjyahId,
+      recordsLoading,
+      recordsError,
+      hasCachedRecords,
+    ],
+  )
+
+  useEffect(() => {
+    if (connectionStatus !== "authenticated") return
+    if (entitiesLoading || recordsLoading) return
+    if (backfillStartedRef.current) return
+
+    const needingBackfill = didjyahs.filter(
+      (didjyah) => didjyah.sinceLast && didjyah.lastRecordedAt == null,
+    )
+    if (needingBackfill.length === 0) return
+
+    backfillStartedRef.current = true
+    void backfillLastRecordedAtBatch(needingBackfill, user.id)
+  }, [
+    connectionStatus,
+    didjyahs,
+    entitiesLoading,
+    recordsLoading,
+    user.id,
+  ])
 
   const activeSessions = useMemo(() => {
     const readyDidjyahs = Array.from(loadStates.values())
@@ -98,10 +142,17 @@ const DidjyahList: React.FC = () => {
   }
 
   if (entitiesError) {
-    return <HomeQueryError label="Failed to load didjyahs" error={entitiesError} />
+    return (
+      <HomeQueryError label="Failed to load didjyahs" error={entitiesError} />
+    )
   }
 
-  const didjyahs = (entitiesData?.didjyahs || []) as DidjyahRow[]
+  if (recordsError && !hasCachedRecords) {
+    return (
+      <HomeQueryError label="Failed to load records" error={recordsError} />
+    )
+  }
+
   const folders = ((entitiesData?.didjyahFolders || []) as DidjyahFolderRow[]).slice()
   folders.sort((a, b) => a.name.localeCompare(b.name))
 
@@ -168,20 +219,15 @@ const DidjyahList: React.FC = () => {
             folder={folder}
             folderDidjyahs={folderMap.get(folder.id) ?? []}
             viewMode={viewMode}
-            ownerId={user.id}
-            todayStartMs={todayStartMs}
             didjyahLoadStates={loadStates}
-            onDidjyahLoadStateChange={handleLoadStateChange}
           />
         ))}
         {unfolderedDidjyahs.map((didjyah) => (
           <DidjyahCardWithRecords
             key={didjyah.id}
-            didjyah={didjyah}
-            ownerId={user.id}
-            todayStartMs={todayStartMs}
+            loadState={loadStates.get(didjyah.id)}
+            fallbackName={didjyah.name}
             viewMode={viewMode}
-            onLoadStateChange={handleLoadStateChange}
           />
         ))}
       </div>

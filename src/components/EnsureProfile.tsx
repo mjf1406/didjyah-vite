@@ -1,5 +1,7 @@
 import React from "react"
+import { toast } from "sonner"
 import { db } from "@/lib/db"
+import { getErrorMessage } from "@/lib/errors"
 
 type EnsureProfileProps = {
   defaults?: {
@@ -15,38 +17,66 @@ export default function EnsureProfile({ defaults }: EnsureProfileProps) {
   const { data, isLoading, error } = db.useQuery({
     profiles: { $: { where: { "user.id": user.id } } },
   })
-  const createdRef = React.useRef(false)
-  const profiles = data?.profiles
+  const attemptRef = React.useRef<"idle" | "pending" | "done" | "failed">(
+    "idle",
+  )
+  const existingProfile = data?.profiles?.[0]
+
+  const existingProfileId = existingProfile?.id
 
   React.useEffect(() => {
-    if (createdRef.current) return
     if (!user?.id) return
     if (user.isGuest) return
     if (isLoading) return
-    const existing = profiles?.[0]
-    if (existing) return
+    if (existingProfileId) {
+      attemptRef.current = "done"
+      return
+    }
+    if (attemptRef.current === "pending" || attemptRef.current === "failed") {
+      return
+    }
 
-    createdRef.current = true
+    attemptRef.current = "pending"
     const firstName = defaults?.firstName ?? ""
     const lastName = defaults?.lastName ?? ""
     const googlePicture = defaults?.googlePicture
     const plan = defaults?.plan ?? "free"
 
-    db.transact(
-      db.tx.profiles[user.id]
-        .update({
-          joined: new Date(),
-          plan,
-          firstName,
-          lastName,
-          googlePicture,
-        })
-        .link({ user: user.id }),
-    ).catch(() => {
-      createdRef.current = false
-    })
-  }, [user?.id, user?.isGuest, isLoading, profiles, defaults])
+    void db
+      .transact(
+        db.tx.profiles[user.id]
+          .update({
+            joined: new Date(),
+            plan,
+            firstName,
+            lastName,
+            googlePicture,
+          })
+          .link({ user: user.id }),
+      )
+      .then(() => {
+        attemptRef.current = "done"
+      })
+      .catch((createError: unknown) => {
+        attemptRef.current = "failed"
+        toast.error(
+          `Could not create your profile: ${getErrorMessage(createError)}`,
+        )
+      })
+  }, [
+    user?.id,
+    user?.isGuest,
+    isLoading,
+    existingProfileId,
+    defaults?.firstName,
+    defaults?.lastName,
+    defaults?.googlePicture,
+    defaults?.plan,
+  ])
 
-  if (error) return null
+  if (error) {
+    console.error("Failed to load profile:", error)
+  }
+
   return null
 }

@@ -14,6 +14,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton"
 import NoDidjyahsCard from "@/components/didjyah/NoDidjyahsCard"
 import ActiveStopwatchBar from "@/components/didjyah/ActiveStopwatchBar"
+import ActiveStopwatchBarSkeleton from "@/components/didjyah/ActiveStopwatchBarSkeleton"
 import { collectActiveStopwatchSessions } from "@/lib/stopwatch"
 import { useViewMode } from "@/components/didjyah/useViewMode"
 import type { InstaQLEntity } from "@instantdb/react"
@@ -181,9 +182,12 @@ const DidjyahList: React.FC = () => {
 
   const unfolderedDidjyahs = didjyahs.filter((didjyah) => !didjyah.folder)
   const isGridView = viewMode === "grid"
+  const showStopwatchSkeleton = recordsLoading && !hasCachedRecords
 
   const activeBarScrollPadding =
-    activeSessions.length === 0
+    showStopwatchSkeleton
+      ? "pb-36 md:pb-28"
+      : activeSessions.length === 0
       ? ""
       : activeSessions.length === 1
         ? "pb-36 md:pb-28"
@@ -231,7 +235,9 @@ const DidjyahList: React.FC = () => {
           />
         ))}
       </div>
-      {activeSessions.length > 0 ? (
+      {showStopwatchSkeleton ? (
+        <ActiveStopwatchBarSkeleton />
+      ) : activeSessions.length > 0 ? (
         <ActiveStopwatchBar sessions={activeSessions} />
       ) : null}
     </div>

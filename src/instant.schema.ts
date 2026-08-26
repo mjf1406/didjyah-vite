@@ -28,7 +28,7 @@ const _schema = i.schema({
         }),
         didjyahRecords: i.entity({
             createdDate: i.number().indexed().optional(),
-            endDate: i.number().optional(),
+            endDate: i.number().indexed().optional(),
             inputs: i.string().optional(),
             note: i.string().optional(),
             updatedDate: i.number().optional(),
@@ -41,6 +41,7 @@ const _schema = i.schema({
             icon: i.string().optional(),
             iconColor: i.string().optional(),
             inputs: i.any().optional(),
+            lastRecordedAt: i.number().indexed().optional(),
             name: i.string(),
             note: i.boolean().optional(),
             quantity: i.number().optional(),

@@ -1,5 +1,5 @@
+import { lazy, Suspense } from "react"
 import { createRootRoute, Outlet } from "@tanstack/react-router"
-import { TanStackRouterDevtools } from "@tanstack/react-router-devtools"
 
 import { ThemeProvider } from "@/components/theme-provider"
 import { TooltipProvider } from "@/components/ui/tooltip"
@@ -10,6 +10,14 @@ import EnsureProfile from "@/components/EnsureProfile"
 import { Toaster } from "@/components/ui/sonner"
 import PWAUpdatePrompt from "@/components/PWAUpdatePrompt"
 import { db } from "@/lib/db"
+
+const TanStackRouterDevtools = import.meta.env.DEV
+  ? lazy(() =>
+      import("@tanstack/react-router-devtools").then((mod) => ({
+        default: mod.TanStackRouterDevtools,
+      }))
+    )
+  : () => null
 
 export const Route = createRootRoute({
   component: RootLayout,
@@ -32,7 +40,9 @@ function RootLayout() {
           <PWAUpdatePrompt />
         </UndoProvider>
       </TooltipProvider>
-      <TanStackRouterDevtools position="bottom-right" />
+      <Suspense>
+        <TanStackRouterDevtools position="bottom-right" />
+      </Suspense>
     </ThemeProvider>
   )
 }

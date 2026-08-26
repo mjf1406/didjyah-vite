@@ -1,5 +1,6 @@
 import React from "react"
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome"
+import "@/lib/fa-icons"
 import { toast } from "sonner"
 import { db } from "@/lib/db"
 import { useUndo } from "@/lib/undo"
@@ -15,7 +16,9 @@ interface ActiveStopwatchBarProps {
   sessions: ActiveStopwatchSession[]
 }
 
-export default function ActiveStopwatchBar({ sessions }: ActiveStopwatchBarProps) {
+export default function ActiveStopwatchBar({
+  sessions,
+}: ActiveStopwatchBarProps) {
   const user = db.useUser()
   const { registerAction } = useUndo()
   const [noteDialogOpen, setNoteDialogOpen] = React.useState(false)
@@ -25,10 +28,7 @@ export default function ActiveStopwatchBar({ sessions }: ActiveStopwatchBarProps
 
   if (sessions.length === 0) return null
 
-  const runStop = async (
-    session: ActiveStopwatchSession,
-    note?: string,
-  ) => {
+  const runStop = async (session: ActiveStopwatchSession, note?: string) => {
     try {
       await stopStopwatchSession({
         recordId: session.record.id,
@@ -61,7 +61,7 @@ export default function ActiveStopwatchBar({ sessions }: ActiveStopwatchBarProps
   return (
     <>
       <div
-        className="fixed bottom-16 left-0 right-0 z-40 border-t border-red-500/30 bg-background/95 px-4 py-2 shadow-[0_-4px_12px_rgba(0,0,0,0.08)] backdrop-blur-sm supports-backdrop-filter:bg-background/85 md:bottom-0"
+        className="fixed right-0 bottom-16 left-0 z-40 border-t border-red-500/30 bg-background/95 px-4 py-2 shadow-[0_-4px_12px_rgba(0,0,0,0.08)] backdrop-blur-sm supports-backdrop-filter:bg-background/85 md:bottom-0"
         role="region"
         aria-label="Active stopwatch sessions"
       >

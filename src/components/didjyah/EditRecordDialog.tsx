@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/credenza"
 import { useUndo, getEntityData } from "@/lib/undo"
 import { nowMs } from "@/lib/time"
+import { syncLastRecordedAtForDidjyah } from "@/lib/records"
 
 function dateToLocalDateTime(date: Date): string {
   const year = date.getFullYear()
@@ -58,6 +59,8 @@ export type EditRecordDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   didjyahName: string
+  didjyahId: string
+  ownerId: string
   record: {
     id: string
     createdDate?: number
@@ -70,6 +73,8 @@ export function EditRecordDialog({
   open,
   onOpenChange,
   didjyahName,
+  didjyahId,
+  ownerId,
   record,
 }: EditRecordDialogProps) {
   const { registerAction } = useUndo()
@@ -145,6 +150,8 @@ export function EditRecordDialog({
           updatedDate: nowMs(),
         }),
       )
+
+      await syncLastRecordedAtForDidjyah(didjyahId, ownerId)
 
       registerAction({
         type: "update",

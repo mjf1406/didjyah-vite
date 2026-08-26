@@ -66,4 +66,21 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes("node_modules/@instantdb")) {
+            return "instantdb"
+          }
+          if (
+            id.includes("node_modules/radix-ui") ||
+            id.includes("node_modules/@radix-ui")
+          ) {
+            return "radix"
+          }
+        },
+      },
+    },
+  },
 })

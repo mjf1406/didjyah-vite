@@ -27,6 +27,9 @@ import {
 } from "@/components/ui/credenza"
 import { useUndo } from "@/lib/undo"
 import { nowMs } from "@/lib/time"
+import {
+  lastRecordedAtUpdateTx,
+} from "@/lib/records"
 import type { InstaQLEntity } from "@instantdb/react"
 import type { AppSchema } from "@/instant.schema"
 
@@ -107,16 +110,20 @@ export function CustomDidjyahDialog({
 
       const recordId = id()
       const trimmedNote = data.note?.trim()
+      const recordTx = db.tx.didjyahRecords[recordId]
+        .update({
+          createdDate: timestamp,
+          updatedDate: timestamp,
+          endDate: timestamp,
+          ...(didjyah.note && trimmedNote ? { note: trimmedNote } : {}),
+        })
+        .link({ didjyah: didjyah.id })
+        .link({ owner: user.id })
+
       await db.transact(
-        db.tx.didjyahRecords[recordId]
-          .update({
-            createdDate: timestamp,
-            updatedDate: timestamp,
-            endDate: timestamp,
-            ...(didjyah.note && trimmedNote ? { note: trimmedNote } : {}),
-          })
-          .link({ didjyah: didjyah.id })
-          .link({ owner: user.id }),
+        timestamp >= (didjyah.lastRecordedAt ?? 0)
+          ? [recordTx, lastRecordedAtUpdateTx(didjyah.id, timestamp)]
+          : recordTx,
       )
 
       registerAction({

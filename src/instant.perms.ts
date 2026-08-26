@@ -108,7 +108,7 @@ const rules = {
       update: "isOwner || isGuestOwner",
     },
   },
-  userProfiles: {
+  profiles: {
     bind: [
       "isAuthenticated",
       "auth.id != null",
@@ -130,7 +130,7 @@ const rules = {
       update: "isOwner",
     },
   },
-  didjyah_records: {
+  didjyahRecords: {
     bind: [
       "isAuthenticated",
       "auth.id != null",

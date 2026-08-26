@@ -1,5 +1,7 @@
-import React, { useState } from "react"
+import { useState } from "react"
 import { db } from "@/lib/db"
+import { getErrorMessage } from "@/lib/errors"
+import { syncLastRecordedAtForDidjyah } from "@/lib/records"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -16,9 +18,7 @@ import {
 import {
   Pagination,
   PaginationContent,
-  PaginationEllipsis,
   PaginationItem,
-  PaginationLink,
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination"
@@ -49,28 +49,11 @@ interface RecordsListProps {
 
 export default function RecordsList({ didjyah }: RecordsListProps) {
   const user = db.useUser()
-  const [requestedPage, setRequestedPage] = useState(1)
+  const [currentPage, setCurrentPage] = useState(1)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState<string | null>(null)
   const [editDialogRecord, setEditDialogRecord] =
     useState<DidjyahRecordWithLinks | null>(null)
   const { registerAction } = useUndo()
-
-  const { data: countData, isLoading: isLoadingCount } = db.useQuery({
-    didjyahRecords: {
-      $: {
-        where: {
-          "didjyah.id": didjyah.id,
-          "owner.id": user.id,
-        },
-      },
-    },
-  })
-
-  const allRecords = (countData?.didjyahRecords ||
-    []) as DidjyahRecordWithLinks[]
-  const totalRecords = allRecords.length
-  const totalPages = Math.max(1, Math.ceil(totalRecords / PAGE_SIZE))
-  const currentPage = Math.min(requestedPage, totalPages)
 
   const { data, isLoading, error } = db.useQuery({
     didjyahRecords: {
@@ -89,12 +72,12 @@ export default function RecordsList({ didjyah }: RecordsListProps) {
   })
 
   const records = (data?.didjyahRecords || []) as DidjyahRecordWithLinks[]
-
-  const isLoadingData = isLoadingCount || isLoading
+  const hasNextPage = records.length === PAGE_SIZE
+  const hasPrevPage = currentPage > 1
 
   const handleDelete = async (recordId: string) => {
     try {
-      const record = allRecords.find((r) => r.id === recordId)
+      const record = records.find((r) => r.id === recordId)
       if (!record) return
 
       const previousData = await getEntityData("didjyahRecords", recordId)
@@ -102,6 +85,7 @@ export default function RecordsList({ didjyah }: RecordsListProps) {
       const ownerId = record.owner?.id ?? user.id
 
       await db.transact(db.tx.didjyahRecords[recordId].delete())
+      await syncLastRecordedAtForDidjyah(didjyahId, ownerId)
       setDeleteDialogOpen(null)
 
       if (previousData && didjyahId && ownerId) {
@@ -135,7 +119,7 @@ export default function RecordsList({ didjyah }: RecordsListProps) {
     })
   }
 
-  if (isLoadingData) {
+  if (isLoading) {
     return (
       <Card>
         <CardHeader>
@@ -164,16 +148,14 @@ export default function RecordsList({ didjyah }: RecordsListProps) {
           <Alert variant="destructive">
             <CircleX className="h-4 w-4" />
             <AlertTitle>Error</AlertTitle>
-            <AlertDescription>
-              {error instanceof Error ? error.message : "An error occurred"}
-            </AlertDescription>
+            <AlertDescription>{getErrorMessage(error)}</AlertDescription>
           </Alert>
         </CardContent>
       </Card>
     )
   }
 
-  if (totalRecords === 0) {
+  if (currentPage === 1 && records.length === 0) {
     return (
       <Card>
         <CardHeader>
@@ -278,7 +260,7 @@ export default function RecordsList({ didjyah }: RecordsListProps) {
             )
           })}
 
-          {totalPages > 1 ? (
+          {(hasPrevPage || hasNextPage) && (
             <div className="pt-4">
               <Pagination>
                 <PaginationContent>
@@ -287,68 +269,31 @@ export default function RecordsList({ didjyah }: RecordsListProps) {
                       href="#"
                       onClick={(e) => {
                         e.preventDefault()
-                        if (currentPage > 1) {
-                          setRequestedPage(currentPage - 1)
+                        if (hasPrevPage) {
+                          setCurrentPage((page) => page - 1)
                           window.scrollTo({ top: 0, behavior: "smooth" })
                         }
                       }}
                       className={
-                        currentPage === 1
+                        !hasPrevPage
                           ? "pointer-events-none opacity-50"
                           : "cursor-pointer"
                       }
                     />
                   </PaginationItem>
 
-                  {Array.from({ length: totalPages }, (_, i) => i + 1)
-                    .filter((page) => {
-                      if (page === 1) return true
-                      if (page === totalPages) return true
-                      if (Math.abs(page - currentPage) <= 1) return true
-                      return false
-                    })
-                    .map((page, index, array) => {
-                      const showEllipsisBefore =
-                        index > 0 && array[index - 1] !== page - 1
-                      return (
-                        <React.Fragment key={page}>
-                          {showEllipsisBefore ? (
-                            <PaginationItem>
-                              <PaginationEllipsis />
-                            </PaginationItem>
-                          ) : null}
-                          <PaginationItem>
-                            <PaginationLink
-                              href="#"
-                              onClick={(e) => {
-                                e.preventDefault()
-                                setRequestedPage(page)
-                                window.scrollTo({
-                                  top: 0,
-                                  behavior: "smooth",
-                                })
-                              }}
-                              isActive={currentPage === page}
-                            >
-                              {page}
-                            </PaginationLink>
-                          </PaginationItem>
-                        </React.Fragment>
-                      )
-                    })}
-
                   <PaginationItem>
                     <PaginationNext
                       href="#"
                       onClick={(e) => {
                         e.preventDefault()
-                        if (currentPage < totalPages) {
-                          setRequestedPage(currentPage + 1)
+                        if (hasNextPage) {
+                          setCurrentPage((page) => page + 1)
                           window.scrollTo({ top: 0, behavior: "smooth" })
                         }
                       }}
                       className={
-                        currentPage === totalPages
+                        !hasNextPage
                           ? "pointer-events-none opacity-50"
                           : "cursor-pointer"
                       }
@@ -357,13 +302,13 @@ export default function RecordsList({ didjyah }: RecordsListProps) {
                 </PaginationContent>
               </Pagination>
             </div>
-          ) : null}
+          )}
 
           <div className="text-sm text-muted-foreground">
-            Showing{" "}
-            {records.length > 0 ? (currentPage - 1) * PAGE_SIZE + 1 : 0} to{" "}
-            {Math.min(currentPage * PAGE_SIZE, totalRecords)} of {totalRecords}{" "}
-            records
+            Page {currentPage}
+            {records.length > 0
+              ? ` · showing ${records.length} record${records.length === 1 ? "" : "s"}`
+              : ""}
           </div>
         </CardContent>
       </Card>
@@ -375,6 +320,8 @@ export default function RecordsList({ didjyah }: RecordsListProps) {
             if (!open) setEditDialogRecord(null)
           }}
           didjyahName={didjyah.name}
+          didjyahId={didjyah.id}
+          ownerId={user.id}
           record={{
             id: editDialogRecord.id,
             createdDate: editDialogRecord.createdDate,

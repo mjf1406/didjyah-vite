@@ -1,6 +1,11 @@
-import React, { useState, useMemo, useEffect } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { useNavigate } from "@tanstack/react-router"
 import { db } from "@/lib/db"
+import { getErrorMessage } from "@/lib/errors"
+import {
+  buildHistoryRecordsWhere,
+  syncLastRecordedAtForDidjyah,
+} from "@/lib/records"
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -21,9 +26,7 @@ import { useUndo, getEntityData } from "@/lib/undo"
 import {
     Pagination,
     PaginationContent,
-    PaginationEllipsis,
     PaginationItem,
-    PaginationLink,
     PaginationNext,
     PaginationPrevious,
 } from "@/components/ui/pagination";
@@ -116,185 +119,60 @@ export function DidjyahHistoryContent() {
         navigate,
     ])
 
-    // Check if any filters are active
+    const historyWhere = useMemo(
+        () =>
+            buildHistoryRecordsWhere({
+                ownerId: user.id,
+                didjyahIds: selectedDidjyahIds,
+                startDate: dateRange.startDate,
+                endDate: dateRange.endDate,
+            }),
+        [
+            user.id,
+            selectedDidjyahIds,
+            dateRange.startDate,
+            dateRange.endDate,
+        ],
+    )
+
+    const { data, isLoading, error } = db.useQuery({
+        didjyahRecords: {
+            $: {
+                where: historyWhere,
+                order: { createdDate: "desc" },
+                limit: PAGE_SIZE,
+                offset: (currentPage - 1) * PAGE_SIZE,
+            },
+            didjyah: {},
+        },
+    })
+
+    const displayRecords = (data?.didjyahRecords ||
+        []) as DidjyahRecordWithDidjyah[]
+    const hasNextPage = displayRecords.length === PAGE_SIZE
+    const hasPrevPage = currentPage > 1
+
     const hasActiveFilters =
         selectedDidjyahIds.length > 0 ||
         dateRange.startDate !== "" ||
-        dateRange.endDate !== "";
-
-    // Query for paginated records (only when no filters are active)
-    const { data, isLoading, error } = db.useQuery(
-        !hasActiveFilters
-            ? {
-                  didjyahRecords: {
-                      $: {
-                          where: { "owner.id": user.id },
-                          order: { createdDate: "desc" },
-                          limit: PAGE_SIZE,
-                          offset: (currentPage - 1) * PAGE_SIZE,
-                      },
-                      didjyah: {},
-                  },
-              }
-            : null
-    );
-
-    // Query for total count (for pagination when no filters)
-    const { data: countData } = db.useQuery(
-        !hasActiveFilters
-            ? {
-                  didjyahRecords: {
-                      $: {
-                          where: { "owner.id": user.id },
-                      },
-                  },
-              }
-            : null
-    );
-
-    const records = (data?.didjyahRecords || []) as DidjyahRecordWithDidjyah[];
-    const allRecords = (countData?.didjyahRecords || []) as DidjyahRecordWithDidjyah[];
-
-    // For filters, we need to fetch all records and filter client-side
-    const { data: filterData, isLoading: isLoadingFilters, error: filterError } = db.useQuery(
-        hasActiveFilters
-            ? {
-                  didjyahRecords: {
-                      $: {
-                          where: { "owner.id": user.id },
-                          order: { createdDate: "desc" },
-                      },
-                      didjyah: {},
-                  },
-              }
-            : null
-    );
-
-    const filterRecords = (filterData?.didjyahRecords || []) as DidjyahRecordWithDidjyah[];
-    
-    // Combine loading states
-    const isLoadingData = hasActiveFilters ? isLoadingFilters : isLoading;
-    const errorData = hasActiveFilters ? filterError : error;
-
-    // Apply all filters and pagination
-    const displayRecords = useMemo(() => {
-        let filtered: DidjyahRecordWithDidjyah[];
-
-        if (hasActiveFilters) {
-            filtered = filterRecords;
-        } else {
-            filtered = records;
-        }
-
-        // Apply didjyah filter
-        if (selectedDidjyahIds.length > 0) {
-            filtered = filtered.filter(
-                (record) =>
-                    record.didjyah?.id &&
-                    selectedDidjyahIds.includes(record.didjyah.id)
-            );
-        }
-
-        // Apply date range filter
-        if (dateRange.startDate || dateRange.endDate) {
-            filtered = filtered.filter((record) => {
-                if (!record.createdDate) return false;
-
-                const recordDate = new Date(record.createdDate);
-                recordDate.setHours(0, 0, 0, 0);
-
-                if (dateRange.startDate) {
-                    const startDate = new Date(dateRange.startDate);
-                    startDate.setHours(0, 0, 0, 0);
-                    if (recordDate < startDate) return false;
-                }
-
-                if (dateRange.endDate) {
-                    const endDate = new Date(dateRange.endDate);
-                    endDate.setHours(23, 59, 59, 999);
-                    if (recordDate > endDate) return false;
-                }
-
-                return true;
-            });
-        }
-
-        // Apply pagination
-        const startIndex = (currentPage - 1) * PAGE_SIZE;
-        return filtered.slice(startIndex, startIndex + PAGE_SIZE);
-    }, [
-        hasActiveFilters,
-        records,
-        filterRecords,
-        selectedDidjyahIds,
-        dateRange.startDate,
-        dateRange.endDate,
-        currentPage,
-    ]);
-
-    // Calculate total records for pagination
-    const totalRecords = useMemo(() => {
-        if (!hasActiveFilters) {
-            return allRecords.length;
-        }
-
-        let filtered = filterRecords;
-
-        if (selectedDidjyahIds.length > 0) {
-            filtered = filtered.filter(
-                (record) =>
-                    record.didjyah?.id &&
-                    selectedDidjyahIds.includes(record.didjyah.id)
-            );
-        }
-
-        if (dateRange.startDate || dateRange.endDate) {
-            filtered = filtered.filter((record) => {
-                if (!record.createdDate) return false
-
-                const recordDate = new Date(record.createdDate)
-                recordDate.setHours(0, 0, 0, 0)
-
-                if (dateRange.startDate) {
-                    const startDate = new Date(dateRange.startDate)
-                    startDate.setHours(0, 0, 0, 0)
-                    if (recordDate < startDate) return false
-                }
-
-                if (dateRange.endDate) {
-                    const endDate = new Date(dateRange.endDate)
-                    endDate.setHours(23, 59, 59, 999)
-                    if (recordDate > endDate) return false
-                }
-
-                return true
-            })
-        }
-
-        return filtered.length
-    }, [
-        hasActiveFilters,
-        allRecords,
-        filterRecords,
-        selectedDidjyahIds,
-        dateRange.startDate,
-        dateRange.endDate,
-    ])
-
-    const totalPages = Math.ceil(totalRecords / PAGE_SIZE);
+        dateRange.endDate !== ""
 
     const handleDelete = async (recordId: string) => {
         try {
-            const allRecordsToSearch = hasActiveFilters ? filterRecords : allRecords;
-            const record = allRecordsToSearch.find((r) => r.id === recordId);
+            const record = displayRecords.find((r) => r.id === recordId);
             if (!record) return;
 
             // Get previous data for undo
             const previousData = await getEntityData("didjyahRecords", recordId);
             const didjyahId = record.didjyah?.id;
-            const ownerId = record.owner?.id;
+            const ownerId = record.owner?.id ?? user.id;
 
             await db.transact(db.tx.didjyahRecords[recordId].delete());
+
+            if (didjyahId) {
+                await syncLastRecordedAtForDidjyah(didjyahId, ownerId);
+            }
+
             setDeleteDialogOpen(null);
 
             if (previousData && didjyahId && ownerId) {
@@ -356,7 +234,7 @@ export function DidjyahHistoryContent() {
         (selectedDidjyahIds.length > 0 ? 1 : 0) +
         (dateRange.startDate || dateRange.endDate ? 1 : 0);
 
-    if (isLoadingData) {
+    if (isLoading) {
         return (
             <div className="m-auto flex w-full max-w-4xl items-center justify-center lg:min-w-3xl">
                 <Skeleton className="h-8 w-32" />
@@ -364,7 +242,7 @@ export function DidjyahHistoryContent() {
         );
     }
 
-    if (errorData) {
+    if (error) {
         return (
             <div className="m-auto flex h-auto w-full items-center justify-center">
                 <div className="max-w-5xl px-4">
@@ -379,9 +257,7 @@ export function DidjyahHistoryContent() {
                         <div className="w-full">
                             <AlertTitle>Error</AlertTitle>
                             <AlertDescription>
-                                {errorData instanceof Error
-                                    ? errorData.message
-                                    : "An error occurred"}
+                                {getErrorMessage(error)}
                             </AlertDescription>
                         </div>
                     </Alert>
@@ -637,7 +513,7 @@ export function DidjyahHistoryContent() {
                             ))}
                         </div>
 
-                        {totalPages > 1 && (
+                        {(hasPrevPage || hasNextPage) && (
                             <div className="mt-6">
                                 <Pagination>
                                     <PaginationContent>
@@ -646,7 +522,7 @@ export function DidjyahHistoryContent() {
                                                 href="#"
                                                 onClick={(e) => {
                                                     e.preventDefault();
-                                                    if (currentPage > 1) {
+                                                    if (hasPrevPage) {
                                                         setCurrentPage(
                                                             currentPage - 1
                                                         );
@@ -657,77 +533,19 @@ export function DidjyahHistoryContent() {
                                                     }
                                                 }}
                                                 className={
-                                                    currentPage === 1
+                                                    !hasPrevPage
                                                         ? "pointer-events-none opacity-50"
                                                         : "cursor-pointer"
                                                 }
                                             />
                                         </PaginationItem>
 
-                                        {Array.from(
-                                            { length: totalPages },
-                                            (_, i) => i + 1
-                                        )
-                                            .filter((page) => {
-                                                // Show first page, last page, current page, and pages around current
-                                                if (page === 1) return true;
-                                                if (page === totalPages)
-                                                    return true;
-                                                if (
-                                                    Math.abs(page - currentPage) <=
-                                                    1
-                                                )
-                                                    return true;
-                                                return false;
-                                            })
-                                            .map((page, index, array) => {
-                                                // Add ellipsis between non-consecutive pages
-                                                const showEllipsisBefore =
-                                                    index > 0 &&
-                                                    array[index - 1] !== page - 1;
-                                                return (
-                                                    <React.Fragment key={page}>
-                                                        {showEllipsisBefore && (
-                                                            <PaginationItem>
-                                                                <PaginationEllipsis />
-                                                            </PaginationItem>
-                                                        )}
-                                                        <PaginationItem>
-                                                            <PaginationLink
-                                                                href="#"
-                                                                onClick={(e) => {
-                                                                    e.preventDefault();
-                                                                    setCurrentPage(
-                                                                        page
-                                                                    );
-                                                                    window.scrollTo(
-                                                                        {
-                                                                            top: 0,
-                                                                            behavior:
-                                                                                "smooth",
-                                                                        }
-                                                                    );
-                                                                }}
-                                                                isActive={
-                                                                    currentPage ===
-                                                                    page
-                                                                }
-                                                            >
-                                                                {page}
-                                                            </PaginationLink>
-                                                        </PaginationItem>
-                                                    </React.Fragment>
-                                                );
-                                            })}
-
                                         <PaginationItem>
                                             <PaginationNext
                                                 href="#"
                                                 onClick={(e) => {
                                                     e.preventDefault();
-                                                    if (
-                                                        currentPage < totalPages
-                                                    ) {
+                                                    if (hasNextPage) {
                                                         setCurrentPage(
                                                             currentPage + 1
                                                         );
@@ -738,7 +556,7 @@ export function DidjyahHistoryContent() {
                                                     }
                                                 }}
                                                 className={
-                                                    currentPage === totalPages
+                                                    !hasNextPage
                                                         ? "pointer-events-none opacity-50"
                                                         : "cursor-pointer"
                                                 }
@@ -750,12 +568,10 @@ export function DidjyahHistoryContent() {
                         )}
 
                         <div className="mt-4 text-sm text-muted-foreground">
-                            Showing {displayRecords.length > 0 ? (currentPage - 1) * PAGE_SIZE + 1 : 0} to{" "}
-                            {Math.min(
-                                currentPage * PAGE_SIZE,
-                                totalRecords
-                            )}{" "}
-                            of {totalRecords} records
+                            Page {currentPage}
+                            {displayRecords.length > 0
+                                ? ` · showing ${displayRecords.length} record${displayRecords.length === 1 ? "" : "s"}`
+                                : ""}
                         </div>
                     </>
                 )}

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { lazy, Suspense, useState, useEffect } from "react"
 import { Link, useLocation } from "@tanstack/react-router"
 import { db } from "@/lib/db"
 import { useUserWithProfile } from "@/lib/useUser"
@@ -12,11 +12,21 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { CreateDidjyahDialog } from "@/components/didjyah/CreateDidjyahDialog"
-import { CreateFolderDialog } from "@/components/didjyah/CreateFolderDialog"
 import { ViewToggle } from "@/components/didjyah/ViewToggle"
-import { History } from "lucide-react"
+import { FolderPlus, History, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { APP_NAME } from "@/lib/constants"
+
+const CreateDidjyahDialog = lazy(() =>
+  import("@/components/didjyah/CreateDidjyahDialog").then((mod) => ({
+    default: mod.CreateDidjyahDialog,
+  }))
+)
+const CreateFolderDialog = lazy(() =>
+  import("@/components/didjyah/CreateFolderDialog").then((mod) => ({
+    default: mod.CreateFolderDialog,
+  }))
+)
 
 function getInitials(firstName?: string, lastName?: string) {
   const f = (firstName || "").trim()
@@ -66,7 +76,7 @@ export default function Navbar() {
               <span className="font-semibold tracking-tight">DidjYah</span>
             </Link>
 
-            <div className="hidden md:flex items-center gap-1">
+            <div className="hidden items-center gap-1 md:flex">
               <db.SignedIn>
                 <Link
                   to="/history"
@@ -82,13 +92,33 @@ export default function Navbar() {
             </div>
           </div>
 
-          <div className="hidden md:flex items-center gap-3">
+          <div className="hidden items-center gap-3 md:flex">
             <Clock />
             {isDidjyahRoute ? (
               <db.SignedIn>
                 <div className="flex items-center gap-2">
-                  <CreateDidjyahDialog />
-                  <CreateFolderDialog />
+                  <Suspense
+                    fallback={
+                      <Button variant="default">
+                        <Plus />
+                        <span className="hidden md:block">
+                          Create {APP_NAME}
+                        </span>
+                      </Button>
+                    }
+                  >
+                    <CreateDidjyahDialog />
+                  </Suspense>
+                  <Suspense
+                    fallback={
+                      <Button variant="outline">
+                        <FolderPlus />
+                        <span className="hidden md:block">Create Folder</span>
+                      </Button>
+                    }
+                  >
+                    <CreateFolderDialog />
+                  </Suspense>
                 </div>
               </db.SignedIn>
             ) : null}
@@ -108,24 +138,40 @@ export default function Navbar() {
             </db.SignedIn>
           </div>
 
-          <div className="flex md:hidden items-center gap-3">
+          <div className="flex items-center gap-3 md:hidden">
             <Clock />
             <ThemeToggle />
           </div>
         </div>
       </header>
 
-      <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-gray-200 bg-background dark:border-gray-800 md:hidden">
+      <nav className="fixed right-0 bottom-0 left-0 z-50 border-t border-gray-200 bg-background md:hidden dark:border-gray-800">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-around px-4">
           {isDidjyahRoute ? (
             <db.SignedIn>
               <div className="flex items-center gap-3">
                 <div className="flex flex-col items-center justify-center gap-1">
-                  <CreateDidjyahDialog />
+                  <Suspense
+                    fallback={
+                      <Button variant="default">
+                        <Plus />
+                      </Button>
+                    }
+                  >
+                    <CreateDidjyahDialog />
+                  </Suspense>
                   <span className="text-xs">Create</span>
                 </div>
                 <div className="flex flex-col items-center justify-center gap-1">
-                  <CreateFolderDialog />
+                  <Suspense
+                    fallback={
+                      <Button variant="outline">
+                        <FolderPlus />
+                      </Button>
+                    }
+                  >
+                    <CreateFolderDialog />
+                  </Suspense>
                   <span className="text-xs">Folder</span>
                 </div>
               </div>

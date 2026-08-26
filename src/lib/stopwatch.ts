@@ -3,6 +3,7 @@ import { db } from "@/lib/db"
 import { getEntityData } from "@/lib/undo"
 import { nowMs } from "@/lib/time"
 import { formatDuration } from "@/lib/duration"
+import { lastRecordedAtUpdateTx } from "@/lib/records"
 
 export type StopwatchRecordLike = {
   id: string
@@ -111,7 +112,7 @@ export async function startStopwatchSession({
   const recordId = id()
   const timestamp = nowMs()
 
-  await db.transact(
+  await db.transact([
     db.tx.didjyahRecords[recordId]
       .update({
         createdDate: timestamp,
@@ -119,7 +120,8 @@ export async function startStopwatchSession({
       })
       .link({ didjyah: didjyahId })
       .link({ owner: ownerId }),
-  )
+    lastRecordedAtUpdateTx(didjyahId, timestamp),
+  ])
 
   registerAction({
     type: "create",

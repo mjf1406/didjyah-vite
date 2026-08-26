@@ -1,5 +1,7 @@
 import React, { useMemo } from "react"
 import { db } from "@/lib/db"
+import { getErrorMessage } from "@/lib/errors"
+import { getTodayStartMs, homeRecordsWhere } from "@/lib/records"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { CircleX } from "lucide-react"
 import DidjyahCard from "@/components/didjyah/DidjyahCard"
@@ -25,16 +27,20 @@ type DidjyahFolderRow = InstaQLEntity<AppSchema, "didjyahFolders", { owner: {} }
 const DidjyahList: React.FC = () => {
   const user = db.useUser()
   const [viewMode] = useViewMode()
+  const todayStartMs = useMemo(() => getTodayStartMs(), [])
 
   const { data, isLoading, error } = db.useQuery({
     didjyahs: {
       $: { where: { "owner.id": user.id } },
-      records: {},
+      records: {
+        $: {
+          where: homeRecordsWhere(todayStartMs),
+        },
+      },
       folder: {},
     },
     didjyahFolders: {
       $: { where: { "owner.id": user.id } },
-      owner: {},
     },
   })
 
@@ -66,9 +72,7 @@ const DidjyahList: React.FC = () => {
             />
             <div className="w-full">
               <AlertTitle>Error</AlertTitle>
-              <AlertDescription>
-                {error instanceof Error ? error.message : "An error occurred"}
-              </AlertDescription>
+              <AlertDescription>{getErrorMessage(error)}</AlertDescription>
             </div>
           </Alert>
         </div>

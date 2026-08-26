@@ -1,6 +1,8 @@
+import { useMemo } from "react"
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router"
-
 import { db } from "@/lib/db"
+import { getErrorMessage } from "@/lib/errors"
+import { getOneYearAgoMs } from "@/lib/records"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Skeleton } from "@/components/ui/skeleton"
 import { CircleX, ArrowLeft } from "lucide-react"
@@ -82,6 +84,7 @@ function DidjyahDashboard() {
   const { didjyahId } = Route.useParams()
   const navigate = useNavigate()
   const user = db.useUser()
+  const oneYearAgoMs = useMemo(() => getOneYearAgoMs(), [])
 
   const { data, isLoading, error } = db.useQuery({
     didjyahs: {
@@ -91,7 +94,13 @@ function DidjyahDashboard() {
           "owner.id": user.id,
         },
       },
-      records: {},
+      records: {
+        $: {
+          where: {
+            createdDate: { $gte: oneYearAgoMs },
+          },
+        },
+      },
     },
   })
 
@@ -105,9 +114,7 @@ function DidjyahDashboard() {
         <Alert variant="destructive">
           <CircleX className="h-4 w-4" />
           <AlertTitle>Error</AlertTitle>
-          <AlertDescription>
-            {error instanceof Error ? error.message : "An error occurred"}
-          </AlertDescription>
+          <AlertDescription>{getErrorMessage(error)}</AlertDescription>
         </Alert>
       </div>
     )

@@ -1,5 +1,6 @@
 import React from "react"
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome"
+import "@/lib/fa-icons"
 import type { IconPrefix, IconName } from "@fortawesome/fontawesome-svg-core"
 import { Button } from "@/components/ui/button"
 import {
@@ -110,7 +111,7 @@ interface FolderCardProps {
 function folderIcon(
   icon: string | undefined,
   iconColor: string | undefined,
-  sizeClass: string,
+  sizeClass: string
 ) {
   if (icon) {
     const parts = icon.split("|")
@@ -145,8 +146,7 @@ const FolderCard: React.FC<FolderCardProps> = ({
 
   const isGrid = viewMode === "grid"
   const childCount = folderDidjyahs.length
-  const countLabel =
-    childCount === 1 ? "1 DidjYah" : `${childCount} DidjYahs`
+  const countLabel = childCount === 1 ? "1 DidjYah" : `${childCount} DidjYahs`
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -173,7 +173,7 @@ const FolderCard: React.FC<FolderCardProps> = ({
             {folderIcon(
               folder.icon,
               folder.iconColor,
-              isGrid ? "text-lg lg:text-2xl" : "text-3xl md:text-5xl",
+              isGrid ? "text-lg lg:text-2xl" : "text-3xl md:text-5xl"
             )}
           </div>
 
@@ -190,7 +190,7 @@ const FolderCard: React.FC<FolderCardProps> = ({
               }`}
             >
               <div
-                className={`min-w-0 flex flex-1 flex-col ${isGrid ? "pr-14" : ""}`}
+                className={`flex min-w-0 flex-1 flex-col ${isGrid ? "pr-14" : ""}`}
               >
                 <span
                   id={`folder-name-${folder.id}`}
@@ -272,11 +272,7 @@ const FolderCard: React.FC<FolderCardProps> = ({
           style={{ backgroundColor: folder.color ?? "#e8e8e8" }}
         >
           <div className="flex min-w-0 flex-1 items-center gap-2">
-            {folderIcon(
-              folder.icon,
-              folder.iconColor,
-              "text-base shrink-0",
-            )}
+            {folderIcon(folder.icon, folder.iconColor, "text-base shrink-0")}
             <PopoverHeader className="min-w-0 gap-0 p-0">
               <PopoverTitle className="truncate text-sm font-semibold">
                 {folder.name}

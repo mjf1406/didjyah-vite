@@ -1,6 +1,7 @@
 import React from "react"
 import { Link } from "@tanstack/react-router"
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome"
+import "@/lib/fa-icons"
 import type { IconPrefix, IconName } from "@fortawesome/fontawesome-svg-core"
 import { toast } from "sonner"
 import { id } from "@instantdb/react"
@@ -12,6 +13,7 @@ import {
   startStopwatchSession,
   stopStopwatchSession,
 } from "@/lib/stopwatch"
+import { lastRecordedAtUpdateTx } from "@/lib/records"
 import { Progress } from "@/components/ui/progress"
 import EditDidjyahDialog from "@/components/didjyah/EditDidjyahDialog"
 import { Button } from "@/components/ui/button"
@@ -65,6 +67,35 @@ const DidjyahCard: React.FC<DidjyahCardProps> = ({
   const activeRecord = getActiveStopwatchRecord(detail)
   const isStopwatchRunning = activeRecord != null
 
+  React.useEffect(() => {
+    if (!detail.sinceLast || detail.lastRecordedAt != null) return
+
+    let cancelled = false
+    void (async () => {
+      const result = await db.queryOnce({
+        didjyahRecords: {
+          $: {
+            where: {
+              "didjyah.id": detail.id,
+              "owner.id": user.id,
+            },
+            order: { createdDate: "desc" },
+            limit: 1,
+          },
+        },
+      })
+
+      const latestCreatedDate = result.data?.didjyahRecords?.[0]?.createdDate
+      if (cancelled || latestCreatedDate == null) return
+
+      await db.transact(lastRecordedAtUpdateTx(detail.id, latestCreatedDate))
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [detail.id, detail.sinceLast, detail.lastRecordedAt, user.id])
+
   let iconComponent: React.ReactNode = null
   if (detail.icon) {
     const parts = detail.icon.split("|")
@@ -75,9 +106,7 @@ const DidjyahCard: React.FC<DidjyahCardProps> = ({
           icon={[prefix as IconPrefix, iconName as IconName]}
           style={{ color: detail.iconColor ?? "#000000" }}
           className={
-            viewMode === "grid"
-              ? "text-lg lg:text-2xl"
-              : "text-3xl md:text-5xl"
+            viewMode === "grid" ? "text-lg lg:text-2xl" : "text-3xl md:text-5xl"
           }
         />
       )
@@ -101,15 +130,13 @@ const DidjyahCard: React.FC<DidjyahCardProps> = ({
   const todayCount = (detail.records || []).filter((record) => {
     const recordDate = record.createdDate
     if (!recordDate) return false
-    return (
-      recordDate >= todayStartTimestamp && recordDate < todayEndTimestamp
-    )
+    return recordDate >= todayStartTimestamp && recordDate < todayEndTimestamp
   }).length
 
   const createInstantRecord = async (timestamp: number, noteText?: string) => {
     const recordId = id()
     const trimmed = noteText?.trim()
-    await db.transact(
+    await db.transact([
       db.tx.didjyahRecords[recordId]
         .update({
           createdDate: timestamp,
@@ -119,7 +146,8 @@ const DidjyahCard: React.FC<DidjyahCardProps> = ({
         })
         .link({ didjyah: detail.id })
         .link({ owner: user.id }),
-    )
+      lastRecordedAtUpdateTx(detail.id, timestamp),
+    ])
     registerAction({
       type: "create",
       entityType: "didjyahRecords",
@@ -236,24 +264,13 @@ const DidjyahCard: React.FC<DidjyahCardProps> = ({
   const percentage = total > 0 ? (current / total) * 100 : 0
   const dailyGoalNum = Number(detail.dailyGoal)
 
-  const records = detail.records || []
-  const lastRecord =
-    records.length > 0
-      ? records.reduce((latest, record) => {
-          if (!latest) return record
-          if (!record.createdDate) return latest
-          if (!latest.createdDate) return record
-          return record.createdDate > latest.createdDate ? record : latest
-        })
-      : null
-
   const showSinceLast =
-    detail.sinceLast &&
-    lastRecord?.createdDate != null &&
-    !isStopwatchRunning
+    detail.sinceLast && detail.lastRecordedAt != null && !isStopwatchRunning
 
   const showRunningTimer =
     isStopwatchRunning && activeRecord?.createdDate != null
+
+  const sinceLastStart = detail.lastRecordedAt
 
   const isGrid = viewMode === "grid"
 
@@ -261,7 +278,9 @@ const DidjyahCard: React.FC<DidjyahCardProps> = ({
     <div
       id={`DidgYa-${detail.id}`}
       className={`relative flex overflow-hidden rounded-lg border shadow-sm ${
-        isGrid ? "w-full cursor-pointer flex-col" : "w-full max-w-[450px] flex-row"
+        isGrid
+          ? "w-full cursor-pointer flex-col"
+          : "w-full max-w-[450px] flex-row"
       } ${isStopwatchRunning ? "ring-2 ring-red-500/40" : ""}`}
       onClick={isGrid ? (e) => void handlePlayClick(e) : undefined}
     >
@@ -287,7 +306,7 @@ const DidjyahCard: React.FC<DidjyahCardProps> = ({
             isGrid ? "flex-col gap-0.5" : "justify-between gap-3 md:gap-5"
           }`}
         >
-          <div className="min-w-0 flex flex-col">
+          <div className="flex min-w-0 flex-col">
             {isGrid ? (
               <>
                 <span
@@ -303,9 +322,9 @@ const DidjyahCard: React.FC<DidjyahCardProps> = ({
                       wrapInParens={false}
                     />
                   </span>
-                ) : showSinceLast ? (
+                ) : showSinceLast && sinceLastStart != null ? (
                   <span className="truncate text-[8px] lg:text-xs">
-                    <SinceStopwatch startDateTime={lastRecord!.createdDate} />
+                    <SinceStopwatch startDateTime={sinceLastStart} />
                   </span>
                 ) : null}
               </>
@@ -324,9 +343,9 @@ const DidjyahCard: React.FC<DidjyahCardProps> = ({
                       wrapInParens={false}
                     />
                   </span>
-                ) : showSinceLast ? (
+                ) : showSinceLast && sinceLastStart != null ? (
                   <span className="shrink-0 text-[10px] md:text-xs">
-                    <SinceStopwatch startDateTime={lastRecord!.createdDate} />
+                    <SinceStopwatch startDateTime={sinceLastStart} />
                   </span>
                 ) : null}
               </div>
@@ -396,17 +415,12 @@ const DidjyahCard: React.FC<DidjyahCardProps> = ({
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem asChild>
-                    <Link
-                      to="/$didjyahId"
-                      params={{ didjyahId: detail.id }}
-                    >
+                    <Link to="/$didjyahId" params={{ didjyahId: detail.id }}>
                       <BarChart3 className="mr-2 h-4 w-4" />
                       View Dashboard
                     </Link>
                   </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => setCustomDialogOpen(true)}
-                  >
+                  <DropdownMenuItem onClick={() => setCustomDialogOpen(true)}>
                     <Calendar className="mr-2 h-4 w-4" />
                     Custom DidjYah
                   </DropdownMenuItem>
@@ -448,10 +462,7 @@ const DidjyahCard: React.FC<DidjyahCardProps> = ({
               <MoreVertical className="h-3.5 w-3.5" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align="end"
-            onClick={(e) => e.stopPropagation()}
-          >
+          <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
             <DropdownMenuItem asChild>
               <Link
                 to="/$didjyahId"
